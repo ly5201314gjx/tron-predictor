@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>波场单双预测系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333;font-size:14px}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+.header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:16px 20px;border-radius:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:18px}.header .sub{font-size:11px;opacity:.7}
+.card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.card h2{font-size:14px;margin-bottom:8px;color:#444;display:flex;justify-content:space-between;align-items:center}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.stat-box{flex:1;min-width:70px;text-align:center;padding:8px 6px;background:#f8f9ff;border-radius:8px}
+.stat-box .num{font-size:20px;font-weight:700;color:#667eea}
+.stat-box .lbl{font-size:10px;color:#999;margin-top:2px}
+.stat-box.green .num{color:#34d399}.stat-box.red .num{color:#f87171}.stat-box.orange .num{color:#fb923c}
+.btn{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600}
+.btn-primary{background:#667eea;color:#fff}.btn-primary:hover{background:#5a6fd6}
+.btn-success{background:#34d399;color:#fff}.btn-success:hover{background:#2bbf89}
+.btn-danger{background:#f87171;color:#fff}.btn-danger:hover{background:#e55b5b}
+.btn-warn{background:#fb923c;color:#fff}.btn-warn:hover{background:#e8822a}
+.btn-sm{padding:3px 8px;font-size:10px}
+.btn-outline{background:transparent;border:1px solid #ddd;color:#666}.btn-outline:hover{background:#f5f5f5}
+.grid{display:grid;gap:8px}.cols-2{grid-template-columns:1fr 1fr}
+@media(max-width:700px){.cols-2{grid-template-columns:1fr}}
+.tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600}
+.tag-green{background:#d1fae5;color:#059669}.tag-red{background:#fee2e2;color:#dc2626}
+.tag-blue{background:#dbeafe;color:#2563eb}
+.flex{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.gap{margin-top:8px}
+#ballPool{display:flex;flex-wrap:wrap;gap:3px;max-height:240px;overflow-y:auto;padding:2px 2px 2px 0;align-content:flex-start}
+#ballPool::-webkit-scrollbar{width:4px}#ballPool::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
+.ball{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;cursor:pointer;position:relative;flex-shrink:0}
+.ball:hover{transform:scale(1.2);z-index:2}
+.ball.single{background:#34d399}.ball.double{background:#60a5fa}
+.ball.W::after{content:'\2713';position:absolute;top:-2px;right:-2px;background:#10b981;color:#fff;font-size:6px;border-radius:50%;width:11px;height:11px;display:flex;align-items:center;justify-content:center;border:1px solid #fff}
+.ball.L::after{content:'\2717';position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:6px;border-radius:50%;width:11px;height:11px;display:flex;align-items:center;justify-content:center;border:1px solid #fff}
+#dataTable{width:100%;border-collapse:collapse;font-size:11px}
+#dataTable th{background:#f8f9ff;padding:4px 6px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #eee;position:sticky;top:0;z-index:1}
+#dataTable td{padding:3px 6px;border-bottom:1px solid #f0f0f0}#dataTable tr:hover{background:#fafbff}
+#predictionList{max-height:160px;overflow-y:auto;padding-right:4px}
+#predictionList::-webkit-scrollbar{width:4px}#predictionList::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
+#logsBox{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:8px;font-family:monospace;font-size:10px;max-height:120px;overflow-y:auto;line-height:1.5}
+#logsBox::-webkit-scrollbar{width:4px}#logsBox::-webkit-scrollbar-thumb{background:#555;border-radius:2px}
+.rule-item{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid #f5f5f5;font-size:11px}
+.rule-item input[type=checkbox]{width:12px;height:12px;cursor:pointer}
+#rulesList{max-height:260px;overflow-y:auto;padding-right:4px}
+#rulesList::-webkit-scrollbar{width:4px}#rulesList::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
+#backtestResult{padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-top:6px;font-size:12px}
+.bt-table{width:100%;border-collapse:collapse;font-size:10px;margin-top:4px}
+.bt-table th{background:#f8f9ff;padding:3px 4px;text-align:left;border-bottom:1px solid #ddd}
+.bt-table td{padding:2px 4px;border-bottom:1px solid #f0f0f0}
+.switch{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:18px;transition:.2s}
+.slider::before{content:"";position:absolute;height:12px;width:12px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked+.slider{background:#667eea}
+.switch input:checked+.slider::before{transform:translateX(14px)}
+.prediction-box{background:linear-gradient(135deg,#ede9fe,#fce7f3);border:2px solid #c4b5fd;border-radius:12px;padding:14px;margin-bottom:12px}
+.status-bar{display:flex;align-items:center;gap:10px;font-size:11px;color:#888;padding:4px 0;flex-wrap:wrap}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
+.dot-green{background:#34d399;animation:pulse 1.5s infinite}
+.dot-gray{background:#ccc}
+@keyframes pulse{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div><h1>🌊 波场单双预测</h1><div class="sub">61 条规则 · 实时监控</div></div>
+    <div class="flex">
+      <span id="liveClock" style="font-family:monospace;font-size:14px;font-weight:700;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:6px;"></span>
+      <button class="btn btn-success btn-sm" onclick="togglePoll()" id="pollBtn">启动</button>
+      <button class="btn btn-primary btn-sm" onclick="fetchOnce()">抓取</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 14px;">
+    <div class="status-bar">
+      <span><span class="dot dot-green" id="liveDot"></span><span id="liveStatus">加载中...</span></span>
+      <span id="statsText">球: - | 胜率: -</span>
+      <span id="streakText"></span>
+      <span id="refreshInfo"></span>
+      <span id="countdownTimer"></span>
+    </div>
+  </div>
+
+  <div class="prediction-box">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="text-align:center;min-width:60px;">
+        <div style="font-size:10px;color:#8b5cf6;">下一球</div>
+        <div id="npDir" style="font-size:36px;font-weight:900;line-height:1.2;">-</div>
+      </div>
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npConf" style="font-size:16px;">-</div><div class="lbl">置信</div></div>
+        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npRul" style="font-size:16px;">-</div><div class="lbl">规则</div></div>
+        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npDrag" style="font-size:16px;">-</div><div class="lbl">长龙</div></div>
+        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npBal" style="font-size:16px;">-</div><div class="lbl">基数</div></div>
+      </div>
+      <div id="npMode" style="font-size:11px;color:#7c3aed;font-weight:600;text-align:center;min-width:60px;"></div>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card" style="padding:10px 14px;">
+      <h2>📜 预测历史</h2>
+      <div id="predictionList"><div style="color:#999;font-size:12px;padding:8px;text-align:center;">加载中...</div></div>
+    </div>
+    <div class="card" style="padding:10px 14px;">
+      <h2>🎱 球池 <span id="ballCount" style="font-size:10px;color:#999;font-weight:400;"></span></h2>
+      <div id="ballPool"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 14px;">
+    <h2>📋 明细</h2>
+    <div style="max-height:200px;overflow-y:auto;">
+      <table id="dataTable"><thead><tr><th>时间</th><th>高度</th><th>结果</th><th>预测</th><th>状态</th></tr></thead><tbody id="dataBody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card" style="padding:10px 14px;">
+      <h2>⚙️ 设置</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+        <div><label style="font-size:11px;">熔断阈值</label>
+          <select id="cbThreshold" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
+            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+        </div>
+        <div><label style="font-size:11px;">轮询(ms)</label>
+          <input id="pollInterval" type="number" value="8000" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
+        </div>
+      </div>
+      <div class="flex" style="margin-bottom:8px;">
+        <label class="switch"><input type="checkbox" id="cbEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">熔断</span>
+        <label class="switch" style="margin-left:12px;"><input type="checkbox" id="revEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">逆向</span>
+      </div>
+      <h2 style="margin-top:8px;font-size:13px;">🔔 钉钉 <span style="font-weight:400;font-size:10px;color:#059669;">✓ 已绑定</span></h2>
+      <input id="dingWebhook" type="text" placeholder="已锁定" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-bottom:4px;background:#f0fdf4;color:#059669;font-weight:600;" readonly disabled>
+      <div class="flex" style="flex-wrap:wrap;margin-bottom:4px;">
+        <label style="font-size:11px;"><input type="checkbox" id="dingHighRate" onchange="updCfg()"> 高胜率推送</label>
+        <span style="font-size:11px;">阈值 ≥ <input id="dingHighTh" type="number" value="55" min="1" max="100" style="width:38px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()">%</span>
+        <label style="font-size:11px;margin-left:6px;"><input type="checkbox" id="dingFail" onchange="updCfg()"> 连败</label>
+        <span style="font-size:11px;">阈值 <input id="dingFailTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
+        <label style="font-size:11px;"><input type="checkbox" id="dingWin" onchange="updCfg()"> 连胜</label>
+        <span style="font-size:11px;">阈值 <input id="dingWinTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
+      </div>
+      <div style="font-size:10px;color:#999;margin-top:2px;">推送关键词「监控」· 规则平均胜率 ≥ 阈值时推送</div>
+    </div>
+    <div class="card" style="padding:10px 14px;">
+      <h2>📏 规则 (61)</h2>
+      <div class="flex gap" style="margin-bottom:4px;">
+        <button class="btn btn-sm btn-success" onclick="batch('enableAll')">全启用</button>
+        <button class="btn btn-sm btn-warn" onclick="disableLow()">禁低胜率</button>
+        <button class="btn btn-sm btn-outline" onclick="batch('clearReversed')">清逆向</button>
+      </div>
+      <div id="rulesList"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 14px;">
+    <h2>📈 回测</h2>
+    <div class="flex">
+      <span style="font-size:11px;">球:</span>
+      <input id="btCount" type="number" value="100" min="10" max="2000" style="width:50px;padding:2px;border:1px solid #ddd;border-radius:4px;font-size:11px;">
+      <button class="btn btn-primary btn-sm" onclick="runBt()">回测</button>
+      <button class="btn btn-danger btn-sm" onclick="clearData()">清数据</button>
+    </div>
+    <div id="backtestResult"></div>
+  </div>
+
+  <div class="card" style="padding:10px 14px;">
+    <h2>📝 日志 <button class="btn btn-sm btn-outline" onclick="$('logsBox').innerHTML=''">清</button></h2>
+    <div id="logsBox"></div>
+  </div>
+</div>
+
+<script>
+var API = '';
+var poll = false;
+
+function $(id){return document.getElementById(id)}
+
+function fetchTimeout(url, ms){
+  ms = ms || 8000;
+  return new Promise(function(resolve){
+    var xhr = new XMLHttpRequest();
+    var timer = setTimeout(function(){ xhr.abort(); resolve(null); }, ms);
+    xhr.onload = function(){
+      clearTimeout(timer);
+      try{ resolve(JSON.parse(xhr.responseText)); }
+      catch(e){ resolve(null); }
+    };
+    xhr.onerror = function(){ clearTimeout(timer); resolve(null); };
+    xhr.open('GET', url, true);
+    xhr.send();
+  });
+}
+
+// 时钟
+setInterval(function(){
+  var d = new Date();
+  var h = d.getHours(); if(h<10) h='0'+h;
+  var m = d.getMinutes(); if(m<10) m='0'+m;
+  var s = d.getSeconds(); if(s<10) s='0'+s;
+  document.getElementById('liveClock').textContent = h+':'+m+':'+s;
+}, 200);
+
+// 倒计时
+var countdown = 5;
+setInterval(function(){
+  countdown--;
+  if(countdown<=0) countdown=5;
+  document.getElementById('countdownTimer').textContent = '\u23F3 '+countdown+'s';
+}, 1000);
+
+// ===== 各区块刷新 =====
+function loadStatus(){
+  fetchTimeout(API+'/api/status').then(function(r){
+    if(!r) return;
+    document.getElementById('statsText').textContent = '\u7403: '+r.totalBalls+' | \u80DC\u7387: '+r.winRate;
+    document.getElementById('streakText').textContent = 'W'+r.currentWinStreak+' L'+r.currentLoseStreak;
+    poll = r.isPolling;
+    var btn = document.getElementById('pollBtn');
+    btn.textContent = poll ? '\u23F9 \u505C\u6B62' : '\u25B6\uFE0F \u542F\u52A8';
+    btn.className = poll ? 'btn btn-danger btn-sm' : 'btn btn-success btn-sm';
+    var status = poll ? '\u8FD0\u884C\u4E2D' : '\u5DF2\u505C\u6B62';
+    if(r.circuitBreakerEnabled) status += ' \uD83E\uDDCA';
+    if(r.reverseModeEnabled) status += ' \uD83D\uDD04';
+    document.getElementById('liveStatus').textContent = status;
+    document.getElementById('liveDot').className = 'dot '+(poll?'dot-green':'dot-gray');
+  });
+}
+
+function loadBalls(){
+  fetchTimeout(API+'/api/balls?limit=300').then(function(r){
+    if(!r) return;
+    document.getElementById('ballCount').textContent = '\u5171 '+r.length+' \u7403';
+    var pool = document.getElementById('ballPool'); pool.innerHTML = '';
+    for(var i=r.length-1; i>=0 && i>=r.length-300; i--){
+      var b = r[i];
+      var div = document.createElement('div');
+      div.className = 'ball '+(b.parity||'')+' '+(b.resultMark||'');
+      div.textContent = b.parity==='single'?'\u5355':'\u53CC';
+      div.title = '#'+b.height+' | '+(b.timeStr||'')+' | \u9884\u6D4B:'+(b.prediction||'-')+' | \u7ED3\u679C:'+(b.resultMark||'-');
+      pool.appendChild(div);
+    }
+    var body = document.getElementById('dataBody'); body.innerHTML = '';
+    for(var i=0; i<r.length && i<100; i++){
+      var b = r[i];
+      var actual = b.parity==='single'?'\u5355':'\u53CC';
+      var pred = b.prediction ? (b.prediction==='single'?'\u5355':'\u53CC') : '-';
+      var mark = b.resultMark==='W'?'\u2705':b.resultMark==='L'?'\u274C':'-';
+      body.innerHTML += '<tr><td>'+(b.timeStr||'-')+'</td><td>'+b.height+'</td><td><span class="tag '+(b.parity==='single'?'tag-green':'tag-blue')+'">'+actual+'</span></td><td>'+pred+'</td><td>'+mark+'</td></tr>';
+    }
+  });
+}
+
+function loadPredictions(){
+  fetchTimeout(API+'/api/predictions').then(function(r){
+    if(!r) return;
+    var list = document.getElementById('predictionList'); list.innerHTML = '';
+    if(!r.length){ list.innerHTML = '<div style="color:#999;font-size:12px;padding:8px;text-align:center;">\u6682\u65E0</div>'; return; }
+    for(var i=0; i<r.length; i++){
+      var p = r[i];
+      var res = p.result==='W'?'\u2705':p.result==='L'?'\u274C':'';
+      list.innerHTML += '<div style="padding:3px 6px;border-bottom:1px solid #f0f0f0;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;"><span style="color:#999;">'+(p.time||'')+'</span> #'+p.height+' \u9884\u6D4B:<strong>'+p.prediction+'</strong> \u5B9E\u9645:'+p.actual+' '+res+' '+(p.confidence||'')+'</div>';
+    }
+  });
+}
+
+function loadNextPrediction(){
+  fetchTimeout(API+'/api/next-prediction').then(function(r){
+    if(!r) return;
+    if(r.prediction){
+      document.getElementById('npDir').textContent = r.predictionLabel;
+      document.getElementById('npDir').style.color = r.prediction==='single'?'#34d399':'#60a5fa';
+      document.getElementById('npConf').textContent = r.confidencePercent;
+      document.getElementById('npRul').textContent = r.ruleCount+'\u6761';
+      document.getElementById('npDrag').textContent = r.dragonLength>1 ? r.dragonParity+'\u00D7'+r.dragonLength : '-';
+      document.getElementById('npBal').textContent = r.totalBalls+'\u7403';
+      var m = '\uD83D\uDFE2';
+      if(r.circuitBreakerArmed) m = '\uD83D\uDD12\u7194\u65AD';
+      else if(r.reverseMode&&r.reversePhase) m = '\uD83D\uDD04\u53CD\u5411';
+      document.getElementById('npMode').textContent = m;
+    } else {
+      document.getElementById('npDir').textContent = '-';
+      document.getElementById('npDir').style.color = '#999';
+      document.getElementById('npConf').textContent = '-';
+      document.getElementById('npRul').textContent = '-';
+      document.getElementById('npDrag').textContent = '-';
+      document.getElementById('npBal').textContent = '-';
+      document.getElementById('npMode').textContent = r.message||'\u23F3';
+    }
+  });
+}
+
+function loadLogs(){
+  fetchTimeout(API+'/api/logs?limit=60').then(function(r){
+    if(!r) return;
+    var box = document.getElementById('logsBox'); box.innerHTML = '';
+    for(var i=0; i<r.length; i++){
+      var l = r[i];
+      box.innerHTML += '<div class="log-'+(l.level||'info')+'">['+(l.timeStr||'')+'] '+l.message+'</div>';
+    }
+    box.scrollTop = box.scrollHeight;
+  });
+}
+
+function loadRules(){
+  fetchTimeout(API+'/api/rules').then(function(r){
+    if(!r) return;
+    var list = document.getElementById('rulesList'); list.innerHTML = '';
+    var en = 0; for(var i=0;i<r.length;i++){ if(r[i].enabled) en++; }
+    list.innerHTML = '<div style="font-size:10px;color:#999;margin-bottom:4px;">\u2705'+en+' \u274C'+(r.length-en)+'</div>';
+    for(var i=0;i<r.length;i++){
+      var rl = r[i];
+      var st = rl.stats || {};
+      var rate = st.used>0 ? (st.wins/st.used*100).toFixed(1)+'%' : '-';
+      var tags = '';
+      if(rl.highTag) tags += '\uD83C\uDFC6';
+      if(rl.lowTag) tags += '\uD83D\uDCC9';
+      if(rl.reversed) tags += '\uD83D\uDD04';
+      var c = '#666';
+      if(st.used>=5){
+        var p = st.wins/st.used;
+        if(p>=0.62) c='#059669'; else if(p>=0.55) c='#2563eb'; else if(p>=0.50) c='#d97706'; else c='#dc2626';
+      }
+      list.innerHTML += '<div class="rule-item"><input type="checkbox" '+(rl.enabled?'checked':'')+' onchange="toggleR(\''+rl.id+'\',this.checked)"><span style="font-weight:600;min-width:26px;font-size:10px;">'+rl.id+'</span><span style="flex:1;color:#666;font-size:10px;">'+rl.name+' '+tags+'</span><span style="color:#999;font-size:9px;">'+st.used+'\u6B21</span><span style="color:'+c+';font-weight:600;font-size:10px;min-width:36px;text-align:right;">'+rate+'</span><button class="btn btn-sm '+(rl.reversed?'btn-warn':'btn-outline')+'" style="font-size:8px;padding:1px 4px;" onclick="revR(\''+rl.id+'\')">'+(rl.reversed?'\u9006':'\u6B63')+'</button></div>';
+    }
+  });
+}
+
+function loadConfig(){
+  fetchTimeout(API+'/api/config').then(function(r){
+    if(!r) return;
+    document.getElementById('cbThreshold').value = r.circuitBreakerThreshold;
+    document.getElementById('cbEnable').checked = r.circuitBreakerEnabled;
+    document.getElementById('revEnable').checked = r.reverseModeEnabled;
+    document.getElementById('pollInterval').value = r.pollingInterval;
+    document.getElementById('dingWebhook').value = r.dingWebhook ? r.dingWebhook.substring(0, 20)+'...✅' : '未配置';
+    document.getElementById('dingHighRate').checked = r.dingModeHighWinRate !== false;
+    document.getElementById('dingHighTh').value = r.dingModeHighWinThreshold || 55;
+    document.getElementById('dingFail').checked = r.dingModeFail;
+    document.getElementById('dingFailTh').value = r.dingModeFailThreshold;
+    document.getElementById('dingWin').checked = r.dingModeWin;
+    document.getElementById('dingWinTh').value = r.dingModeWinThreshold;
+  });
+}
+
+// ===== 全量刷新 =====
+function refresh(){
+  var d = new Date();
+  var h = d.getHours(); if(h<10) h='0'+h;
+  var m = d.getMinutes(); if(m<10) m='0'+m;
+  var s = d.getSeconds(); if(s<10) s='0'+s;
+  document.getElementById('refreshInfo').textContent = '\uD83D\uDD04 '+h+':'+m+':'+s;
+  loadStatus();
+  loadBalls();
+  loadPredictions();
+  loadNextPrediction();
+  loadLogs();
+  loadRules();
+  loadConfig();
+}
+
+// ===== 操作 =====
+function toggleR(id,enabled){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/rules', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({ruleId:id,enabled:enabled}));
+}
+
+function revR(id){
+  fetchTimeout(API+'/api/rules').then(function(rules){
+    if(!rules) return;
+    for(var i=0;i<rules.length;i++){
+      if(rules[i].id===id){
+        var nr = !rules[i].reversed;
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API+'/api/rules', true);
+        xhr.setRequestHeader('Content-Type','application/json');
+        xhr.send(JSON.stringify({ruleId:id,reversed:nr}));
+        break;
+      }
+    }
+  });
+}
+
+function togglePoll(){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/control', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({action:poll?'stop':'start'}));
+}
+
+function fetchOnce(){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/control', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({action:'fetchOnce'}));
+}
+
+function updCfg(){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/config', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({
+    circuitBreakerEnabled:document.getElementById('cbEnable').checked,
+    circuitBreakerThreshold:parseInt(document.getElementById('cbThreshold').value),
+    reverseModeEnabled:document.getElementById('revEnable').checked,
+    pollingInterval:parseInt(document.getElementById('pollInterval').value),
+    dingModeHighWinRate:document.getElementById('dingHighRate').checked,
+    dingModeHighWinThreshold:parseInt(document.getElementById('dingHighTh').value),
+    dingModeFail:document.getElementById('dingFail').checked,
+    dingModeFailThreshold:parseInt(document.getElementById('dingFailTh').value),
+    dingModeWin:document.getElementById('dingWin').checked,
+    dingModeWinThreshold:parseInt(document.getElementById('dingWinTh').value)
+  }));
+}
+
+function saveDing(){
+  // Webhook 已锁定，不可修改
+  // 只保存推送模式设置
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/config', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({
+    dingModeHighWinRate:document.getElementById('dingHighRate').checked,
+    dingModeHighWinThreshold:parseInt(document.getElementById('dingHighTh').value),
+    dingModeFail:document.getElementById('dingFail').checked,
+    dingModeFailThreshold:parseInt(document.getElementById('dingFailTh').value),
+    dingModeWin:document.getElementById('dingWin').checked,
+    dingModeWinThreshold:parseInt(document.getElementById('dingWinTh').value)
+  }));
+}
+
+function testDing(){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/dingtalk/test', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({}));
+}
+
+function batch(action){
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/rules/batch', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({action:action}));
+}
+
+function disableLow(){
+  var t = prompt('\u7981\u7528\u4F4E\u4E8E\u591A\u5C11%?','50');
+  if(t===null) return;
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/rules/batch', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({action:'disableLow',threshold:parseFloat(t)}));
+}
+
+function runBt(){
+  var c = parseInt(document.getElementById('btCount').value);
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/backtest', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({count:c}));
+  xhr.onload = function(){
+    try {
+      var r = JSON.parse(xhr.responseText);
+      var div = document.getElementById('backtestResult');
+      if(r.error){ div.innerHTML = '<span style="color:#ef4444;">'+r.error+'</span>'; return; }
+      var h = '<div style="display:flex;gap:12px;margin-bottom:6px;flex-wrap:wrap;"><span>\u603B\u7403: '+r.total+'</span><span style="color:#10b981;">\u6B63\u786E: '+r.correct+'</span><span style="color:#ef4444;">\u9519\u8BEF: '+r.wrong+'</span><span>\u51C6\u786E\u7387: <strong>'+r.accuracy+'</strong></span></div>';
+      if(r.ruleSummary && r.ruleSummary.length){
+        h += '<table class="bt-table"><thead><tr><th>\u89C4\u5219</th><th>\u6B21\u6570</th><th>\u80DC</th><th>\u8D1F</th><th>\u80DC\u7387</th></tr></thead><tbody>';
+        for(var i=0;i<r.ruleSummary.length && i<200;i++){
+          var s = r.ruleSummary[i];
+          var p = parseFloat(s.winRate);
+          var cls = p>=62 ? ' style="color:#059669;"' : (p<=40 ? ' style="color:#ef4444;"' : '');
+          h += '<tr><td>'+s.id+'</td><td>'+s.used+'</td><td>'+s.wins+'</td><td>'+s.losses+'</td><td'+cls+'>'+s.winRate+'</td></tr>';
+        }
+        h += '</tbody></table>';
+      }
+      div.innerHTML = h;
+    } catch(e){}
+  };
+}
+
+function clearData(){
+  if(!confirm('\u786E\u5B9A\u6E05\u9664\uFF1F')) return;
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', API+'/api/control', true);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.send(JSON.stringify({action:'clearAll'}));
+}
+
+// ===== 启动 =====
+refresh();
+setInterval(refresh, 5000);
+
+// 每分钟 34-38 秒强制刷新核心数据（哈希池、预测历史、实时预测）
+setInterval(function(){
+  var sec = new Date().getSeconds();
+  if(sec >= 34 && sec <= 38){
+    loadBalls();
+    loadPredictions();
+    loadNextPrediction();
+    // 同时更新状态栏
+    var d = new Date();
+    var h = d.getHours(); if(h<10) h='0'+h;
+    var m = d.getMinutes(); if(m<10) m='0'+m;
+    var s = d.getSeconds(); if(s<10) s='0'+s;
+    document.getElementById('refreshInfo').textContent = '\uD83D\uDD04 '+h+':'+m+':'+s + ' \u2606\u5F3A\u5237';
+  }
+}, 1000);
+</script>
+</body>
+</html>
