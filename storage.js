@@ -48,6 +48,17 @@ const state = {
   periodDetectionThreshold: 0.08,
   periodDetectionBoost: 0.25,
   periodDetectionBias: 0,
+  // 连胜连败推送：达到N次才推钉钉，否则静默处理
+  streakPushEnabled: false,
+  streakPushThreshold: 3,
+  // 输赢交替推送：交替N次后推钉钉，然后持续推送直到交替结束
+  altPushEnabled: false,
+  altPushThreshold: 3,
+  altPushCount: 0,
+  altLastResult: null,
+  altForcePush: false,
+  altModeActive: false, // 交替模式是否激活（持续推送中）
+  altRound: 0,          // 当前交替轮次
   logs: []
 };
 
