@@ -4,7 +4,7 @@
 >
 > 基于 TRON 区块链哈希的奇偶预测系统 — 61 条规则引擎 + 智能熔断 + 周期检测 + 钉钉推送
 
-![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![Version](https://img.shields.io/badge/版本-v2.0.0-blue) ![TRON](https://img.shields.io/badge/TRON-API-red) ![Rules](https://img.shields.io/badge/规则-61条-purple) [![Changelog](https://img.shields.io/badge/📝-更新日志-orange)](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)
+![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![Version](https://img.shields.io/badge/版本-v2.1.0-blue) ![TRON](https://img.shields.io/badge/TRON-API-red) ![Rules](https://img.shields.io/badge/规则-61条-purple) [![Changelog](https://img.shields.io/badge/📝-更新日志-orange)](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)
 
 ---
 
