@@ -1,8 +1,22 @@
 # 🌊 波场单双预测系统 (TRON Predictor)
 
-> TRON 区块链奇偶预测系统 — 实时监控区块哈希，61 条规则引擎，钉钉推送，Web 前端可视化
+> **智能守护 · 精准预测 · 理性决策**
+>
+> 基于 TRON 区块链哈希的奇偶预测系统 — 61 条规则引擎 + 智能熔断 + 周期检测 + 钉钉推送
 
-![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![License](https://img.shields.io/badge/License-MIT-blue) ![TRON](https://img.shields.io/badge/TRON-API-red) [![Changelog](https://img.shields.io/badge/📝-更新日志-blue)](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)
+![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![Version](https://img.shields.io/badge/版本-v2.0.0-blue) ![TRON](https://img.shields.io/badge/TRON-API-red) ![Rules](https://img.shields.io/badge/规则-61条-purple) [![Changelog](https://img.shields.io/badge/📝-更新日志-orange)](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)
+
+---
+
+## ✨ v2.0 亮点
+
+| 🧠 智能熔断 | 📊 周期检测 | 🔔 推送革命 |
+|:---:|:---:|:---:|
+| 连败2次自动暂停 | 检测单双分布漂移 | 每区块严格2条消息 |
+| 递增冷却（1→2→3→5块） | 偏移>8%时翻转预测 | 3次自动重试 |
+| 最高连败 11→**2** | 胜率再+0.33% | 紧凑规则显示 |
+
+---
 
 ## 📝 更新日志
 
