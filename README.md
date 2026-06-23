@@ -2,7 +2,11 @@
 
 > TRON 区块链奇偶预测系统 — 实时监控区块哈希，61 条规则引擎，钉钉推送，Web 前端可视化
 
-![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![License](https://img.shields.io/badge/License-MIT-blue) ![TRON](https://img.shields.io/badge/TRON-API-red)
+![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![License](https://img.shields.io/badge/License-MIT-blue) ![TRON](https://img.shields.io/badge/TRON-API-red) [![Changelog](https://img.shields.io/badge/📝-更新日志-blue)](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)
+
+## 📝 更新日志
+
+👉 **[CHANGELOG.md](https://github.com/ly5201314gjx/tron-predictor/blob/main/CHANGELOG.md)**
 
 ---
 
