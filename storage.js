@@ -36,6 +36,18 @@ const state = {
   ruleHighTag: {},
   ruleLowTag: {},
   ruleStats: {},
+  // 智能熔断（回测最优：连败2次冷却1块）
+  smartBreakerEnabled: false,
+  smartBreakerThreshold: 2,
+  smartBreakerCooldown: 1,
+  smartBreakerCoolingUntil: 0,
+  smartBreakerCooldownCount: 0,
+  // 周期检测（回测最优：窗口50/阈值0.08/加权0.25）
+  periodDetectionEnabled: false,
+  periodDetectionWindow: 50,
+  periodDetectionThreshold: 0.08,
+  periodDetectionBoost: 0.25,
+  periodDetectionBias: 0,
   logs: []
 };
 
