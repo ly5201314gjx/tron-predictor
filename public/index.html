@@ -154,6 +154,32 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
         </div>
         <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：连败2次冷却1块 · 胜率+0.6% 最高连败降9</div>
       </div>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div class="flex" style="margin-bottom:4px;">
+          <label class="switch"><input type="checkbox" id="streakPushEnable" onchange="updCfg()"><span class="slider"></span></label>
+          <span style="font-size:11px;font-weight:600;color:#166534;">📶 连胜连败推送</span>
+        </div>
+        <div class="flex gap" style="font-size:11px;">
+          <span>连{''}胜或连败 ≥ <select id="streakPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
+          </select> 次</span>
+          <span style="color:#999;">才推钉钉</span>
+        </div>
+        <div style="font-size:9px;color:#6b7280;margin-top:3px;">开启后：未达阈值不推送，达到后推送提醒</div>
+      </div>
+      <div style="background:#fdf4ff;border:1px solid #d946ef;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div class="flex" style="margin-bottom:4px;">
+          <label class="switch"><input type="checkbox" id="altPushEnable" onchange="updCfg()"><span class="slider"></span></label>
+          <span style="font-size:11px;font-weight:600;color:#86198f;">🔀 输赢交替推送</span>
+        </div>
+        <div class="flex gap" style="font-size:11px;">
+          <span>交替 ≥ <select id="altPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
+          </select> 次</span>
+          <span style="color:#999;">才推钉钉</span>
+        </div>
+        <div style="font-size:9px;color:#6b7280;margin-top:3px;">一赢一输算1次交替，达到后推送提醒</div>
+      </div>
       <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
         <div class="flex" style="margin-bottom:4px;">
           <label class="switch"><input type="checkbox" id="periodDetectionEnable" onchange="updCfg()"><span class="slider"></span></label>
@@ -414,6 +440,10 @@ function loadConfig(){
     document.getElementById('periodWindow').value = r.periodDetectionWindow || 50;
     document.getElementById('periodThreshold').value = r.periodDetectionThreshold || 0.08;
     document.getElementById('periodBoost').value = r.periodDetectionBoost || 0.25;
+    document.getElementById('streakPushEnable').checked = r.streakPushEnabled;
+    document.getElementById('streakPushThreshold').value = r.streakPushThreshold || 3;
+    document.getElementById('altPushEnable').checked = r.altPushEnabled;
+    document.getElementById('altPushThreshold').value = r.altPushThreshold || 3;
   });
 }
 
@@ -492,7 +522,11 @@ function updCfg(){
     periodDetectionEnabled:document.getElementById('periodDetectionEnable').checked,
     periodDetectionWindow:parseInt(document.getElementById('periodWindow').value),
     periodDetectionThreshold:parseFloat(document.getElementById('periodThreshold').value),
-    periodDetectionBoost:parseFloat(document.getElementById('periodBoost').value)
+    periodDetectionBoost:parseFloat(document.getElementById('periodBoost').value),
+    streakPushEnabled:document.getElementById('streakPushEnable').checked,
+    streakPushThreshold:parseInt(document.getElementById('streakPushThreshold').value),
+    altPushEnabled:document.getElementById('altPushEnable').checked,
+    altPushThreshold:parseInt(document.getElementById('altPushThreshold').value)
   }));
 }
 
