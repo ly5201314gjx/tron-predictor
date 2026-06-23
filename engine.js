@@ -1601,6 +1601,46 @@ function runBacktest(sample, options = {}) {
   return { results, ruleStatsBT };
 }
 
+// ========== 周期检测：单双分布偏移补偿 ==========
+// 参数：window=检测窗口, threshold=偏移阈值(0.08=8%), boost=加权力度(0.25)
+function applyPeriodDetection(balls, engineResult, options = {}) {
+  const { window = 50, threshold = 0.08, boost = 0.25 } = options;
+  
+  if (!engineResult || !engineResult.finalPrediction || balls.length < window + 5) {
+    return { pred: engineResult?.finalPrediction, conf: engineResult?.combinedConfidence, periodBias: 0, flipped: false };
+  }
+  
+  const recent = balls.slice(-window);
+  const singles = recent.filter(b => b.parity === 'single').length;
+  const doubles = recent.filter(b => b.parity === 'double').length;
+  const total = singles + doubles;
+  if (total === 0) return { pred: engineResult.finalPrediction, conf: engineResult.combinedConfidence, periodBias: 0, flipped: false };
+  
+  const singleRatio = singles / total;
+  const bias = singleRatio - 0.5; // 正=偏单，负=偏双
+  
+  let pred = engineResult.finalPrediction;
+  let conf = engineResult.combinedConfidence;
+  let flipped = false;
+  
+  if (Math.abs(bias) > threshold) {
+    // 计算引擎的"方向分数"
+    const engineScore = pred === 'single' ? 0.5 + conf * 0.5 : 0.5 - conf * 0.5;
+    // 加上周期偏移
+    let boostedScore = engineScore + boost * (bias / 0.5);
+    
+    const newPred = boostedScore >= 0.5 ? 'single' : 'double';
+    if (newPred !== pred) {
+      flipped = true;
+      pred = newPred;
+      // 翻转后置信度：取引擎置信和偏移强度的加权平均
+      conf = Math.max(conf, 0.5 + Math.abs(bias) * 0.3);
+    }
+  }
+  
+  return { pred, conf, periodBias: bias, flipped };
+}
+
 module.exports = {
   RULES,
   runPredictionEngine,
@@ -1609,5 +1649,6 @@ module.exports = {
   getDragonInfo,
   parityToLabel,
   reverseParity,
-  recentPerformance
+  recentPerformance,
+  applyPeriodDetection
 };
