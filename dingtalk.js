@@ -35,32 +35,50 @@ async function sendDingTalkMessage(content, logFn) {
     if (logFn) logFn('钉钉推送未执行：Webhook 格式不正确', 'warn');
     return false;
   }
-  try {
-    // 确保消息包含关键词"监控"
-    const finalContent = content.indexOf('监控') === -1 ? '【监控】' + content : content;
-    const payload = { msgtype: 'text', text: { content: finalContent } };
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (resp.ok) {
-      const result = await resp.json();
-      if (result.errcode === 0) {
-        if (logFn) logFn('钉钉推送成功');
-        return true;
+  
+  // 重试机制：最多3次，带超时
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const finalContent = content.indexOf('监控') === -1 ? '【监控】' + content : content;
+      const payload = { msgtype: 'text', text: { content: finalContent } };
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+      
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.errcode === 0) {
+          if (logFn) logFn('钉钉推送成功');
+          return true;
+        } else {
+          if (logFn) logFn('钉钉推送返回错误: ' + JSON.stringify(result), 'error');
+          // 限流错误等一下再试
+          if (result.errcode === 130101 && attempt < 3) {
+            await new Promise(r => setTimeout(r, 2000 * attempt));
+            continue;
+          }
+          return false;
+        }
       } else {
-        if (logFn) logFn('钉钉推送返回错误: ' + JSON.stringify(result), 'error');
-        return false;
+        if (logFn) logFn(`钉钉推送 HTTP 失败: ${resp.status} (第${attempt}次)`, 'error');
+        if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+        continue;
       }
-    } else {
-      if (logFn) logFn('钉钉推送 HTTP 失败: ' + resp.status, 'error');
-      return false;
+    } catch (err) {
+      if (logFn) logFn(`钉钉推送网络错误: ${err.message} (第${attempt}次)`, 'error');
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
     }
-  } catch (err) {
-    if (logFn) logFn('钉钉推送网络错误: ' + err.message, 'error');
-    return false;
   }
+  if (logFn) logFn('钉钉推送最终失败：重试3次均失败', 'error');
+  return false;
 }
 
 // 计算推送触发条件
