@@ -34,6 +34,17 @@ async function pushNextPredictionNow() {
       return;
     }
     
+    // 连胜连败推送过滤
+    if (state.streakPushEnabled) {
+      const threshold = state.streakPushThreshold;
+      const isWinStreak = state.currentWinStreak >= threshold;
+      const isLoseStreak = state.currentLoseStreak >= threshold;
+      if (!isWinStreak && !isLoseStreak) {
+        log(`🔇 预测静默: 连胜${state.currentWinStreak}/连败${state.currentLoseStreak} < 阈值${threshold}`);
+        return;
+      }
+    }
+    
     const balls = storage.getBalls();
     if (balls.length < 1) return;
     
@@ -68,7 +79,8 @@ async function pushNextPredictionNow() {
     let shouldPush = false;
     let ruleStatsWithRate = [];
     
-    if (config.dingModeHighWinRate && dingtalk.hasValidDingWebhook()) {
+    // 预测始终推送，不再受规则胜率门槛限制
+    if (dingtalk.hasValidDingWebhook()) {
       const ruleOutputs = engineResult.ruleOutputs.filter(r => !r.ruleId.startsWith('DRAGON'));
       let totalRate = 0, rateCount = 0;
       for (const ro of ruleOutputs) {
@@ -81,13 +93,11 @@ async function pushNextPredictionNow() {
         }
       }
       const avgRate = rateCount > 0 ? (totalRate / rateCount) * 100 : 0;
-      if (avgRate >= config.dingModeHighWinThreshold) {
-        shouldPush = true;
-      }
+      shouldPush = true; // 始终推送预测
     }
     
     if (shouldPush) {
-      const nextHeight = Math.ceil(((state.lastKnownBlockHeight || 0) + 1) / 20) * 20;
+      const nextHeight = Math.ceil(((state.lastKnownBlockHeight || 0) + 1) / 20) * 20; // 正常：lastKnownBlockHeight已在processNewBlocks里更新
       const dirLabel = finalPred === 'single' ? '单' : '双';
       const confText = (combinedConf * 100).toFixed(1) + '%';
       
@@ -98,6 +108,13 @@ async function pushNextPredictionNow() {
       parts.push(`🎯 预测：${dirLabel}  |  置信：${confText}`);
       if (nextHeight) parts.push(`📍 目标高度：#${nextHeight}`);
       
+      // 连胜连败推送提示
+      if (state.streakPushEnabled && state.currentLoseStreak >= state.streakPushThreshold) {
+        parts.push(`💡 本次连败${state.currentLoseStreak}次 → 顺着这次预测买`);
+      } else if (state.streakPushEnabled && state.currentWinStreak >= state.streakPushThreshold) {
+        parts.push(`💡 本次连胜${state.currentWinStreak}次 → 反着这次预测买`);
+      }
+      
       // 近100球统计
       const recentBalls = state.balls.slice(-100);
       const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
@@ -105,17 +122,6 @@ async function pushNextPredictionNow() {
       const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
       const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
       parts.push(`📊 近100球: ${recentRate}%  |  单${recentSingles}双${recentDoubles}`);
-      
-      const sorted = ruleStatsWithRate.filter(r => r.ruleRate !== null).sort((a, b) => (b.ruleRate || 0) - (a.ruleRate || 0));
-      if (sorted.length > 0) {
-        parts.push(`━━━ 规则胜率 ━━━`);
-        // 计算平均胜率
-        const avg = sorted.reduce((s, r) => s + r.ruleRate, 0) / sorted.length;
-        parts.push(`平均 ${avg.toFixed(1)}%  ·  参与 ${sorted.length} 条`);
-        const ruleLine = sorted.slice(0, 10).map(r => `${r.ruleId}(${r.ruleRate.toFixed(0)}%)`).join(' ');
-        parts.push(`  ${ruleLine}`);
-        if (sorted.length > 10) parts.push(`  ...等 ${sorted.length} 条`);
-      }
       
       await dingtalk.sendDingTalkMessage(parts.join('\n'), log);
       lastPredictionPushBlock = currentHeight;
@@ -133,6 +139,18 @@ async function pushNextPredictionNow() {
 async function pushResult(ball, finalPred, combinedConf, engineResult, isCorrect) {
   try {
     if (!dingtalk.hasValidDingWebhook()) return;
+    
+    // 连胜连败推送过滤（交替推送可绕过）
+    if (state.streakPushEnabled && !state.altForcePush) {
+      const threshold = state.streakPushThreshold;
+      const isWinStreak = isCorrect && state.currentWinStreak >= threshold;
+      const isLoseStreak = !isCorrect && state.currentLoseStreak >= threshold;
+      if (!isWinStreak && !isLoseStreak) {
+        log(`🔇 结果静默处理: #${ball.height} (连胜${state.currentWinStreak}/连败${state.currentLoseStreak} < 阈值${threshold})`);
+        return;
+      }
+    }
+    state.altForcePush = false; // 使用后清除标记
     
     const dirLabel = finalPred === 'single' ? '单' : '双';
     const actualLabel = ball.parity === 'single' ? '单' : ball.parity === 'double' ? '双' : '-';
@@ -168,16 +186,6 @@ async function pushResult(ball, finalPred, combinedConf, engineResult, isCorrect
       }
     }
     const avgRate = rateCount > 0 ? (totalRate / rateCount) * 100 : 0;
-    
-    const sorted = ruleStatsWithRate.sort((a, b) => (b.ruleRate || 0) - (a.ruleRate || 0));
-    if (sorted.length > 0) {
-      parts.push(`━━━ 规则胜率 ━━━`);
-      parts.push(`平均 ${avgRate.toFixed(1)}%  ·  参与 ${sorted.length} 条`);
-      // 紧凑显示：R1(60%) R2(55%) R3(72%) ...
-      const ruleLine = sorted.slice(0, 10).map(r => `${r.ruleId}(${r.ruleRate.toFixed(0)}%)`).join(' ');
-      parts.push(`  ${ruleLine}`);
-      if (sorted.length > 10) parts.push(`  ...等 ${sorted.length} 条`);
-    }
     
     await dingtalk.sendDingTalkMessage(parts.join('\n'), log);
     log(`📣 已推送结果: #${ball.height} ${dirLabel} ${resText}`);
@@ -379,6 +387,107 @@ async function handleBlock(block) {
           }
         }
 
+        // ===== 输赢交替计数 =====
+        if (state.altPushEnabled) {
+          const curResult = isCorrect ? 'W' : 'L';
+
+          // 交替模式中：检查是否还在交替
+          if (state.altModeActive) {
+            if (curResult !== state.altLastResult) {
+              // 还在交替 → 推送本轮结果 + 下次预测
+              state.altRound++;
+              state.altForcePush = true;
+              state.altLastResult = curResult; // ← 关键：更新上一次结果
+
+              // 推送带交替轮次的预测
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = rawNumber + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 波场单双监控',
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（交替 第' + state.altRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + rawNumber + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  '💡 ' + altHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ 输赢交替 ━━━',
+                  '⚡ 交替进行中 · 第' + state.altRound + '轮 · 连胜' + state.currentWinStreak + ' · 连败' + state.currentLoseStreak,
+                  '总胜率 ' + (state.totalWins/(state.totalWins+state.totalLosses)*100).toFixed(1) + '%'
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`📣 交替第${state.altRound}轮预测: ${dirLabel} ${confText}`);
+              }
+            } else {
+              // 交替断裂（出现连胜或连败）→ 结束交替模式
+              log(`📊 交替模式结束: 第${state.altRound}轮后断裂`, 'warn');
+              state.altModeActive = false;
+              state.altRound = 0;
+              state.altPushCount = 0;
+            }
+          } else {
+            // 交替模式未激活：正常计数
+            if (state.altLastResult && curResult !== state.altLastResult) {
+              state.altPushCount++;
+            } else if (state.altLastResult === null || curResult !== state.altLastResult) {
+              state.altPushCount = 1;
+            }
+            state.altLastResult = curResult;
+
+            // 达到阈值 → 激活交替模式，轮次从已交替次数开始
+            if (state.altPushCount >= state.altPushThreshold) {
+              state.altModeActive = true;
+              state.altRound = state.altPushCount; // 轮次=已交替次数
+              state.altForcePush = true;
+
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = rawNumber + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 波场单双监控',
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（交替触发·第' + state.altRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + rawNumber + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  '💡 ' + altHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ 输赢交替 ━━━',
+                  '⚡ 连续 ' + state.altPushCount + ' 次交替 → 开始持续推送',
+                  '连胜 ' + state.currentWinStreak + ' · 连败 ' + state.currentLoseStreak + ' · 总胜率 ' + (state.totalWins/(state.totalWins+state.totalLosses)*100).toFixed(1) + '%'
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`📣 交替触发: 第${state.altRound}轮 · ${dirLabel} ${confText}`);
+              }
+            }
+          }
+        }
+
         // 更新规则统计
         for (const ro of engineResult.ruleOutputs) {
           if (ro.ruleId && !ro.ruleId.startsWith('DRAGON')) {
@@ -495,7 +604,12 @@ app.get('/api/status', (req, res) => {
     periodDetectionWindow: state.periodDetectionWindow,
     periodDetectionThreshold: state.periodDetectionThreshold,
     periodDetectionBoost: state.periodDetectionBoost,
-    periodDetectionBias: (state.periodDetectionBias * 100).toFixed(1) + '%'
+    periodDetectionBias: (state.periodDetectionBias * 100).toFixed(1) + '%',
+    streakPushEnabled: state.streakPushEnabled,
+    streakPushThreshold: state.streakPushThreshold,
+    altPushEnabled: state.altPushEnabled,
+    altPushThreshold: state.altPushThreshold,
+    altPushCount: state.altPushCount
   });
 });
 
@@ -651,7 +765,12 @@ app.get('/api/config', (req, res) => {
     periodDetectionEnabled: state.periodDetectionEnabled,
     periodDetectionWindow: state.periodDetectionWindow,
     periodDetectionThreshold: state.periodDetectionThreshold,
-    periodDetectionBoost: state.periodDetectionBoost
+    periodDetectionBoost: state.periodDetectionBoost,
+    streakPushEnabled: state.streakPushEnabled,
+    streakPushThreshold: state.streakPushThreshold,
+    altPushEnabled: state.altPushEnabled,
+    altPushThreshold: state.altPushThreshold,
+    altPushCount: state.altPushCount
   });
 });
 
@@ -675,6 +794,10 @@ app.post('/api/config', (req, res) => {
   if (body.periodDetectionWindow !== undefined) state.periodDetectionWindow = body.periodDetectionWindow;
   if (body.periodDetectionThreshold !== undefined) state.periodDetectionThreshold = body.periodDetectionThreshold;
   if (body.periodDetectionBoost !== undefined) state.periodDetectionBoost = body.periodDetectionBoost;
+  if (body.streakPushEnabled !== undefined) state.streakPushEnabled = body.streakPushEnabled;
+  if (body.streakPushThreshold !== undefined) state.streakPushThreshold = body.streakPushThreshold;
+  if (body.altPushEnabled !== undefined) state.altPushEnabled = body.altPushEnabled;
+  if (body.altPushThreshold !== undefined) state.altPushThreshold = body.altPushThreshold;
 
   dingtalk.updateDingConfig(config);
   storage.saveConfig();
