@@ -135,8 +135,43 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
         </div>
       </div>
       <div class="flex" style="margin-bottom:8px;">
-        <label class="switch"><input type="checkbox" id="cbEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">熔断</span>
+        <label class="switch"><input type="checkbox" id="cbEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">旧熔断</span>
         <label class="switch" style="margin-left:12px;"><input type="checkbox" id="revEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">逆向</span>
+      </div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div class="flex" style="margin-bottom:4px;">
+          <label class="switch"><input type="checkbox" id="smartBreakerEnable" onchange="updCfg()"><span class="slider"></span></label>
+          <span style="font-size:11px;font-weight:600;color:#1e40af;">⚡ 智能熔断</span>
+          <span id="smartStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
+        </div>
+        <div class="flex gap" style="font-size:11px;">
+          <span>连败 ≥ <select id="smartThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select> 冷却</span>
+          <span><select id="smartCooldown" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select> 个区块</span>
+        </div>
+        <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：连败2次冷却1块 · 胜率+0.6% 最高连败降9</div>
+      </div>
+      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div class="flex" style="margin-bottom:4px;">
+          <label class="switch"><input type="checkbox" id="periodDetectionEnable" onchange="updCfg()"><span class="slider"></span></label>
+          <span style="font-size:11px;font-weight:600;color:#92400e;">📊 周期检测</span>
+          <span id="periodStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
+        </div>
+        <div class="flex gap" style="font-size:11px;">
+          <span>窗口 <select id="periodWindow" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="30">30</option><option value="50" selected>50</option><option value="80">80</option>
+          </select>球</span>
+          <span>偏移 ≥ <select id="periodThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="0.05">5%</option><option value="0.08" selected>8%</option><option value="0.12">12%</option>
+          </select></span>
+          <span>加权 <select id="periodBoost" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+            <option value="0.10">0.10</option><option value="0.15">0.15</option><option value="0.20">0.20</option><option value="0.25" selected>0.25</option>
+          </select></span>
+        </div>
+        <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：窗口50 阈值8% 加权0.25 · 胜率+0.8% 连败≥5减半</div>
       </div>
       <h2 style="margin-top:8px;font-size:13px;">🔔 钉钉 <span style="font-weight:400;font-size:10px;color:#059669;">✓ 已绑定</span></h2>
       <input id="dingWebhook" type="text" placeholder="已锁定" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-bottom:4px;background:#f0fdf4;color:#059669;font-weight:600;" readonly disabled>
@@ -232,6 +267,30 @@ function loadStatus(){
     if(r.reverseModeEnabled) status += ' \uD83D\uDD04';
     document.getElementById('liveStatus').textContent = status;
     document.getElementById('liveDot').className = 'dot '+(poll?'dot-green':'dot-gray');
+    // 智能熔断状态
+    var ss = document.getElementById('smartStatus');
+    if(r.smartBreakerEnabled){
+      if(r.smartBreakerCoolingUntil > 0){
+        ss.textContent = '⏸ 冷却到#'+r.smartBreakerCoolingUntil+' | 已触发'+r.smartBreakerCooldownCount+'次';
+        ss.style.color = '#dc2626';
+      } else {
+        ss.textContent = '✅ 已启用 | 触发'+r.smartBreakerCooldownCount+'次';
+        ss.style.color = '#059669';
+      }
+    } else {
+      ss.textContent = '';
+      ss.style.color = '#999';
+    }
+    // 周期检测状态
+    var ps = document.getElementById('periodStatus');
+    if(r.periodDetectionEnabled){
+      var bias = parseFloat(r.periodDetectionBias) || 0;
+      if(bias > 0.05) { ps.textContent = '📈 偏单 '+r.periodDetectionBias; ps.style.color = '#dc2626'; }
+      else if(bias < -0.05) { ps.textContent = '📉 偏双 '+r.periodDetectionBias; ps.style.color = '#2563eb'; }
+      else { ps.textContent = '⚖️ 平衡'; ps.style.color = '#059669'; }
+    } else {
+      ps.textContent = '';
+    }
   });
 }
 
@@ -348,6 +407,13 @@ function loadConfig(){
     document.getElementById('dingFailTh').value = r.dingModeFailThreshold;
     document.getElementById('dingWin').checked = r.dingModeWin;
     document.getElementById('dingWinTh').value = r.dingModeWinThreshold;
+    document.getElementById('smartBreakerEnable').checked = r.smartBreakerEnabled;
+    document.getElementById('smartThreshold').value = r.smartBreakerThreshold || 2;
+    document.getElementById('smartCooldown').value = r.smartBreakerCooldown || 1;
+    document.getElementById('periodDetectionEnable').checked = r.periodDetectionEnabled;
+    document.getElementById('periodWindow').value = r.periodDetectionWindow || 50;
+    document.getElementById('periodThreshold').value = r.periodDetectionThreshold || 0.08;
+    document.getElementById('periodBoost').value = r.periodDetectionBoost || 0.25;
   });
 }
 
@@ -419,7 +485,14 @@ function updCfg(){
     dingModeFail:document.getElementById('dingFail').checked,
     dingModeFailThreshold:parseInt(document.getElementById('dingFailTh').value),
     dingModeWin:document.getElementById('dingWin').checked,
-    dingModeWinThreshold:parseInt(document.getElementById('dingWinTh').value)
+    dingModeWinThreshold:parseInt(document.getElementById('dingWinTh').value),
+    smartBreakerEnabled:document.getElementById('smartBreakerEnable').checked,
+    smartBreakerThreshold:parseInt(document.getElementById('smartThreshold').value),
+    smartBreakerCooldown:parseInt(document.getElementById('smartCooldown').value),
+    periodDetectionEnabled:document.getElementById('periodDetectionEnable').checked,
+    periodDetectionWindow:parseInt(document.getElementById('periodWindow').value),
+    periodDetectionThreshold:parseFloat(document.getElementById('periodThreshold').value),
+    periodDetectionBoost:parseFloat(document.getElementById('periodBoost').value)
   }));
 }
 
