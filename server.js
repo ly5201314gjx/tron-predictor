@@ -52,6 +52,18 @@ async function pushNextPredictionNow() {
       finalPred = engine.reverseParity(finalPred);
     }
     
+    // 周期检测
+    if (state.periodDetectionEnabled && finalPred) {
+      const pd = engine.applyPeriodDetection(balls, { finalPrediction: finalPred, combinedConfidence: combinedConf }, {
+        window: state.periodDetectionWindow,
+        threshold: state.periodDetectionThreshold,
+        boost: state.periodDetectionBoost
+      });
+      finalPred = pd.pred;
+      combinedConf = pd.conf;
+      state.periodDetectionBias = pd.periodBias;
+    }
+    
     // 检查推送条件
     let shouldPush = false;
     let ruleStatsWithRate = [];
@@ -225,7 +237,8 @@ async function processNewBlocks() {
     storage.saveState();
     
     // 只在处理了新区块后才推一次下期预测，没处理就不推
-    if (processedBlocks) {
+    // 智能熔断冷却中也不推
+    if (processedBlocks && !(state.smartBreakerEnabled && state.smartBreakerCoolingUntil > 0)) {
       await pushNextPredictionNow();
     }
   } catch (err) {
@@ -267,36 +280,56 @@ async function handleBlock(block) {
   // 先加球再推送，防止并发 handleBlock 同时通过去重检查导致重复推送
   storage.addBall(ball);
 
-  const history = [...state.balls];
+  // 用加球前的历史数据计算预测（预测当前球，不是下一个球）
+  const history = state.balls.slice(0, -1);
 
   if (history.length > 0) {
-    // 熔断检查
+    // ========== 智能熔断：冷却期内跳过预测 ==========
+    if (state.smartBreakerEnabled && state.smartBreakerCoolingUntil > 0 && rawNumber <= state.smartBreakerCoolingUntil) {
+      log(`⏸ 智能熔断冷却中: #${rawNumber} ≤ #${state.smartBreakerCoolingUntil}，跳过预测`, 'warn');
+    } else {
+      // 冷却期结束（不重置连败计数，让连败延续 — 如果还继续输就再次触发熔断）
+      if (state.smartBreakerEnabled && state.smartBreakerCoolingUntil > 0 && rawNumber > state.smartBreakerCoolingUntil) {
+        log(`✅ 智能熔断冷却结束: #${rawNumber}，连败${state.currentLoseStreak}次继续保留`, 'warn');
+        state.smartBreakerCoolingUntil = 0;
+        // 不重置 currentLoseStreak，让连败跨冷却延续
+      }
+
+    // ========== 旧熔断 ==========
     if (state.circuitBreakerEnabled && state.circuitBreakerArmed) {
       state.circuitBreakerArmed = false;
-      log(`🔒 熔断生效：跳过高度 ${rawNumber} 的预测，实际结果: ${engine.parityToLabel(parity)}`, 'warn');
+      log(`🔒 旧熔断生效：跳过高度 ${rawNumber}`, 'warn');
       if (dingtalk.hasValidDingWebhook()) {
         dingtalk.sendDingTalkMessage(`🔒 熔断生效：跳过高度 ${rawNumber} 的预测`, log);
       }
     } else {
-      // 运行预测引擎
-      const ruleEnabledMap = state.ruleEnabled;
-      const ruleReversedMap = state.ruleReversed;
+      // ========== 运行预测引擎 ==========
       const engineResult = engine.runPredictionEngine(history, {
-        ruleEnabled: ruleEnabledMap,
-        ruleReversed: ruleReversedMap,
+        ruleEnabled: state.ruleEnabled,
+        ruleReversed: state.ruleReversed,
         ruleStats: state.ruleStats
       });
 
       let finalPred = engineResult.finalPrediction;
       let combinedConf = engineResult.combinedConfidence;
 
-      // 逆向模式
-      let usedReverse = false;
-      if (state.reverseModeEnabled && finalPred) {
-        if (state.reversePhase) {
-          finalPred = engine.reverseParity(finalPred);
-          usedReverse = true;
+      if (state.reverseModeEnabled && finalPred && state.reversePhase) {
+        finalPred = engine.reverseParity(finalPred);
+      }
+
+      // 周期检测：检测单双分布偏移，可能翻转预测方向
+      if (state.periodDetectionEnabled && finalPred) {
+        const pd = engine.applyPeriodDetection(history, { finalPrediction: finalPred, combinedConfidence: combinedConf }, {
+          window: state.periodDetectionWindow,
+          threshold: state.periodDetectionThreshold,
+          boost: state.periodDetectionBoost
+        });
+        if (pd.flipped) {
+          log(`🔄 周期检测翻转: ${engine.parityToLabel(finalPred)} → ${engine.parityToLabel(pd.pred)} (偏移${(pd.periodBias*100).toFixed(1)}%)`);
         }
+        finalPred = pd.pred;
+        combinedConf = pd.conf;
+        state.periodDetectionBias = pd.periodBias;
       }
 
       ball.prediction = finalPred;
@@ -306,11 +339,11 @@ async function handleBlock(block) {
         const isCorrect = finalPred === parity;
         ball.resultMark = isCorrect ? 'W' : 'L';
 
-        // 更新统计
         if (isCorrect) {
           state.totalWins++;
           state.currentWinStreak++;
           state.currentLoseStreak = 0;
+          state.smartBreakerCooldownCount = 0; // 赢了重置冷却计数，下次从头开始
           if (state.currentWinStreak > state.bestWinStreak) state.bestWinStreak = state.currentWinStreak;
           log(`✅ 预测正确！高度 ${rawNumber}，预测 ${engine.parityToLabel(finalPred)}，实际 ${engine.parityToLabel(parity)}`);
         } else {
@@ -320,19 +353,29 @@ async function handleBlock(block) {
           if (state.currentLoseStreak > state.bestLoseStreak) state.bestLoseStreak = state.currentLoseStreak;
           log(`❌ 预测失败！高度 ${rawNumber}，预测 ${engine.parityToLabel(finalPred)}，实际 ${engine.parityToLabel(parity)}`, 'warn');
 
-          // 熔断触发
+          // 旧熔断触发
           if (state.circuitBreakerEnabled && state.currentLoseStreak >= state.circuitBreakerThreshold) {
             state.circuitBreakerArmed = true;
-            log(`🔒 触发熔断条件：连续 ${state.currentLoseStreak} 次失败`, 'warn');
+            log(`🔒 旧熔断触发：连续 ${state.currentLoseStreak} 次失败`, 'warn');
+          }
+
+          // 智能熔断触发：连败达到阈值 → 冷却N个区块（递增冷却，避免反复触发死循环）
+          if (state.smartBreakerEnabled && !state.smartBreakerCoolingUntil && state.currentLoseStreak >= state.smartBreakerThreshold) {
+            // 递增冷却：第1次跳1块，第2次跳2块，第3次跳3块...
+            const effectiveCooldown = Math.min(state.smartBreakerCooldown + state.smartBreakerCooldownCount, 5);
+            const interestingGap = 20;
+            state.smartBreakerCoolingUntil = rawNumber + interestingGap * effectiveCooldown;
+            state.smartBreakerCooldownCount++;
+            log(`⚡ 智能熔断触发：连续${state.currentLoseStreak}次失败，冷却${effectiveCooldown}块到 #${state.smartBreakerCoolingUntil}`, 'warn');
             if (dingtalk.hasValidDingWebhook()) {
-              dingtalk.sendDingTalkMessage(`🔒 熔断触发：已连续失败 ${state.currentLoseStreak} 次`, log);
+              dingtalk.sendDingTalkMessage(`📊 波场单双监控\n━━━━━━━━━━━━━━\n⚡ 智能熔断触发\n━━━━━━━━━━━━━━\n连败${state.currentLoseStreak}次达到阈值(${state.smartBreakerThreshold})\n冷却 ${effectiveCooldown} 个区块到 #${state.smartBreakerCoolingUntil}\n累计触发 ${state.smartBreakerCooldownCount} 次`, log);
             }
           }
 
           // 逆向模式翻转
           if (state.reverseModeEnabled) {
             state.reversePhase = !state.reversePhase;
-            log(`🔄 逆向模式翻转，下次预测方向: ${state.reversePhase ? '反向' : '原始'}`);
+            log(`🔄 逆向模式翻转`);
           }
         }
 
@@ -345,20 +388,18 @@ async function handleBlock(block) {
             state.ruleStats[ro.ruleId].used++;
             if (isCorrect) state.ruleStats[ro.ruleId].wins++;
             else state.ruleStats[ro.ruleId].losses++;
-            // 记录到近期表现跟踪
             engine.recentPerformance.recordResult(ro.ruleId, isCorrect);
           }
         }
 
-        // 钉钉推送结果（只推最新高度，批量处理时不重复推）
+        // 钉钉推送结果
         dingtalk.updateDingRuntime(state.currentLoseStreak, state.currentWinStreak, ball.resultMark);
         if (dingtalk.hasValidDingWebhook() && rawNumber > state.highestPushedHeight) {
           state.highestPushedHeight = rawNumber;
-          // 先等结果推送完成，再安排预测推送，保证钉钉消息顺序
           await pushResult(ball, finalPred, combinedConf, engineResult, isCorrect);
         }
       } else if (finalPred && !parity) {
-        log(`⚠️ 高度 ${rawNumber}：有预测(${engine.parityToLabel(finalPred)})但未获取到实际结果`, 'warn');
+        log(`⚠️ 高度 ${rawNumber}：有预测但未获取到实际结果`, 'warn');
       }
 
       // 保存预测快照
@@ -372,8 +413,9 @@ async function handleBlock(block) {
       });
       if (predictionSnapshot.length > 100) predictionSnapshot.pop();
     }
+    } // 智能熔断 else 结束
   } else {
-    log(`首球记录：高度 ${rawNumber}，结果: ${engine.parityToLabel(parity)}（无历史数据，不做预测）`);
+    log(`首球记录：高度 ${rawNumber}（无历史数据）`);
   }
 
   // 更新区块时间追踪
@@ -399,18 +441,22 @@ function startPolling() {
 async function pollingLoop() {
   if (!isPolling) return;
   if (isProcessing) {
-    // 上一轮没跑完，等2秒再试
-    setTimeout(pollingLoop, 2000);
+    setTimeout(pollingLoop, 1500);
     return;
   }
+
   try {
     await processNewBlocks();
   } catch (err) {
     log(`轮询异常: ${err.message}`, 'error');
   }
-  // 跑完后等4秒再下一次
+
+  // 智能间隔：刚处理完区块后快速再查（可能还有积压），否则正常3秒
+  const elapsed = Date.now() - lastBlockTime;
+  const waitMs = elapsed < 5000 ? 1500 : 3000;
+
   if (isPolling) {
-    setTimeout(pollingLoop, 4000);
+    setTimeout(pollingLoop, waitMs);
   }
 }
 
@@ -439,7 +485,17 @@ app.get('/api/status', (req, res) => {
     circuitBreakerArmed: state.circuitBreakerArmed,
     circuitBreakerThreshold: state.circuitBreakerThreshold,
     reverseModeEnabled: state.reverseModeEnabled,
-    reversePhase: state.reversePhase
+    reversePhase: state.reversePhase,
+    smartBreakerEnabled: state.smartBreakerEnabled,
+    smartBreakerThreshold: state.smartBreakerThreshold,
+    smartBreakerCooldown: state.smartBreakerCooldown,
+    smartBreakerCoolingUntil: state.smartBreakerCoolingUntil,
+    smartBreakerCooldownCount: state.smartBreakerCooldownCount,
+    periodDetectionEnabled: state.periodDetectionEnabled,
+    periodDetectionWindow: state.periodDetectionWindow,
+    periodDetectionThreshold: state.periodDetectionThreshold,
+    periodDetectionBoost: state.periodDetectionBoost,
+    periodDetectionBias: (state.periodDetectionBias * 100).toFixed(1) + '%'
   });
 });
 
@@ -588,7 +644,14 @@ app.get('/api/config', (req, res) => {
     pollingInterval: config.pollingInterval,
     circuitBreakerEnabled: state.circuitBreakerEnabled,
     circuitBreakerThreshold: state.circuitBreakerThreshold,
-    reverseModeEnabled: state.reverseModeEnabled
+    reverseModeEnabled: state.reverseModeEnabled,
+    smartBreakerEnabled: state.smartBreakerEnabled,
+    smartBreakerThreshold: state.smartBreakerThreshold,
+    smartBreakerCooldown: state.smartBreakerCooldown,
+    periodDetectionEnabled: state.periodDetectionEnabled,
+    periodDetectionWindow: state.periodDetectionWindow,
+    periodDetectionThreshold: state.periodDetectionThreshold,
+    periodDetectionBoost: state.periodDetectionBoost
   });
 });
 
@@ -605,6 +668,13 @@ app.post('/api/config', (req, res) => {
   if (body.circuitBreakerEnabled !== undefined) state.circuitBreakerEnabled = body.circuitBreakerEnabled;
   if (body.circuitBreakerThreshold !== undefined) state.circuitBreakerThreshold = body.circuitBreakerThreshold;
   if (body.reverseModeEnabled !== undefined) { state.reverseModeEnabled = body.reverseModeEnabled; if (!body.reverseModeEnabled) state.reversePhase = false; }
+  if (body.smartBreakerEnabled !== undefined) state.smartBreakerEnabled = body.smartBreakerEnabled;
+  if (body.smartBreakerThreshold !== undefined) state.smartBreakerThreshold = body.smartBreakerThreshold;
+  if (body.smartBreakerCooldown !== undefined) state.smartBreakerCooldown = body.smartBreakerCooldown;
+  if (body.periodDetectionEnabled !== undefined) state.periodDetectionEnabled = body.periodDetectionEnabled;
+  if (body.periodDetectionWindow !== undefined) state.periodDetectionWindow = body.periodDetectionWindow;
+  if (body.periodDetectionThreshold !== undefined) state.periodDetectionThreshold = body.periodDetectionThreshold;
+  if (body.periodDetectionBoost !== undefined) state.periodDetectionBoost = body.periodDetectionBoost;
 
   dingtalk.updateDingConfig(config);
   storage.saveConfig();
