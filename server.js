@@ -7,6 +7,7 @@ const engine = require('./engine');
 const fetcher = require('./fetcher');
 const dingtalk = require('./dingtalk');
 const storage = require('./storage');
+const V2hs9Listener = require('./ws-listener');
 
 const app = express();
 app.use(express.json());
@@ -23,6 +24,27 @@ let advancePushTimer = null; // 定时推送计时器
 let lastBlockTime = Date.now(); // 上个区块处理时间
 let avgBlockInterval = 62000; // 平均区块间隔(ms)，默认62秒
 let lastPredictionPushBlock = 0; // 上次推送预测时的区块高度，防重复推送
+let wsListener = null; // WebSocket 实时监听
+
+// 后端驱动的 50 秒倒计时
+let countdownValue = 0;
+let countdownRunning = false;
+let countdownTimer = null;
+
+function resetCountdown() {
+  countdownValue = 50;
+  countdownRunning = true;
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    if (countdownRunning && countdownValue > 0) {
+      countdownValue--;
+      if (countdownValue <= 0) {
+        countdownRunning = false;
+        countdownValue = 0;
+      }
+    }
+  }, 1000);
+}
 
 // 立即推送下一期预测
 async function pushNextPredictionNow() {
@@ -540,6 +562,338 @@ async function handleBlock(block) {
   storage.saveState();
 }
 
+// WebSocket 实时区块处理（复用 handleBlock 核心逻辑）
+async function processWebSocketBlock(ball, history) {
+  try {
+    if (history.length > 0) {
+      // 智能熔断冷却检查
+      if (state.smartBreakerEnabled && state.smartBreakerCoolingUntil > 0 && ball.height <= state.smartBreakerCoolingUntil) {
+        log(`⏸ [WS] 智能熔断冷却中: #${ball.height}，跳过预测`);
+        return;
+      } else if (state.smartBreakerEnabled && state.smartBreakerCoolingUntil > 0 && ball.height > state.smartBreakerCoolingUntil) {
+        log(`✅ [WS] 智能熔断冷却结束: #${ball.height}`);
+        state.smartBreakerCoolingUntil = 0;
+        state.currentLoseStreak = 0;
+      }
+
+      // 旧熔断
+      if (state.circuitBreakerEnabled && state.circuitBreakerArmed) {
+        state.circuitBreakerArmed = false;
+        log(`[WS] 🔒 旧熔断生效：跳过高度 ${ball.height}`, 'warn');
+        if (dingtalk.hasValidDingWebhook()) {
+          dingtalk.sendDingTalkMessage(`🔒 熔断生效：跳过高度 ${ball.height} 的预测`, log);
+        }
+        return;
+      }
+
+      const engineResult = engine.runPredictionEngine(history, {
+        ruleEnabled: state.ruleEnabled,
+        ruleReversed: state.ruleReversed,
+        ruleStats: state.ruleStats
+      });
+
+      let finalPred = engineResult.finalPrediction;
+      let combinedConf = engineResult.combinedConfidence;
+
+      if (state.reverseModeEnabled && finalPred && state.reversePhase) {
+        finalPred = engine.reverseParity(finalPred);
+      }
+
+      // 周期检测
+      if (state.periodDetectionEnabled && finalPred) {
+        const pd = engine.applyPeriodDetection(history, { finalPrediction: finalPred, combinedConfidence: combinedConf }, {
+          window: state.periodDetectionWindow,
+          threshold: state.periodDetectionThreshold,
+          boost: state.periodDetectionBoost
+        });
+        if (pd.flipped) {
+          log(`🔄 [WS] 周期检测翻转: ${engine.parityToLabel(finalPred)} → ${engine.parityToLabel(pd.pred)}`);
+        }
+        finalPred = pd.pred;
+        combinedConf = pd.conf;
+        state.periodDetectionBias = pd.periodBias;
+      }
+
+      ball.prediction = finalPred;
+      ball.ruleResults = engineResult.ruleOutputs;
+
+      if (finalPred && ball.parity) {
+        const isCorrect = finalPred === ball.parity;
+        ball.resultMark = isCorrect ? 'W' : 'L';
+
+        if (isCorrect) {
+          state.totalWins++;
+          state.currentWinStreak++;
+          state.currentLoseStreak = 0;
+          state.smartBreakerCooldownCount = 0;
+          if (state.currentWinStreak > state.bestWinStreak) state.bestWinStreak = state.currentWinStreak;
+          log(`✅ [WS] 预测正确！#${ball.height} ${engine.parityToLabel(finalPred)} vs ${engine.parityToLabel(ball.parity)}`);
+        } else {
+          state.totalLosses++;
+          state.currentLoseStreak++;
+          state.currentWinStreak = 0;
+          if (state.currentLoseStreak > state.bestLoseStreak) state.bestLoseStreak = state.currentLoseStreak;
+          log(`❌ [WS] 预测失败！#${ball.height} ${engine.parityToLabel(finalPred)} vs ${engine.parityToLabel(ball.parity)}`);
+
+          // 智能熔断
+          if (state.smartBreakerEnabled && !state.smartBreakerCoolingUntil && state.currentLoseStreak >= state.smartBreakerThreshold) {
+            const effectiveCooldown = Math.min(state.smartBreakerCooldown + state.smartBreakerCooldownCount, 5);
+            state.smartBreakerCoolingUntil = ball.height + 20 * effectiveCooldown;
+            state.smartBreakerCooldownCount++;
+            log(`⚡ [WS] 智能熔断触发: 连败${state.currentLoseStreak}次，冷却${effectiveCooldown}块`);
+            if (dingtalk.hasValidDingWebhook()) {
+              dingtalk.sendDingTalkMessage(`📊 监控 | ${timeNow()}\n━━━━━━━━━━━━━━\n⚡ 智能熔断触发\n━━━━━━━━━━━━━━\n连败${state.currentLoseStreak}次达到阈值(${state.smartBreakerThreshold})\n冷却 ${effectiveCooldown} 个区块到 #${state.smartBreakerCoolingUntil}\n累计触发 ${state.smartBreakerCooldownCount} 次`, log);
+            }
+          }
+
+          // 旧熔断触发
+          if (state.circuitBreakerEnabled && state.currentLoseStreak >= state.circuitBreakerThreshold) {
+            state.circuitBreakerArmed = true;
+            log(`[WS] 🔒 旧熔断触发：连续 ${state.currentLoseStreak} 次失败`, 'warn');
+          }
+
+          // 逆向模式翻转
+          if (state.reverseModeEnabled) {
+            state.reversePhase = !state.reversePhase;
+            log(`[WS] 🔄 逆向模式翻转`);
+          }
+        }
+
+        // ===== 输赢交替计数（同 handleBlock 逻辑） =====
+        if (state.altPushEnabled) {
+          const curResult = isCorrect ? 'W' : 'L';
+
+          if (state.altModeActive) {
+            if (curResult !== state.altLastResult) {
+              state.altRound++;
+              state.altForcePush = true;
+              state.altLastResult = curResult;
+
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = ball.height + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 监控 | ' + timeNow(),
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（交替 第' + state.altRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  '💡 ' + altHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ 输赢交替 ━━━',
+                  '⚡ 交替进行中 · 第' + state.altRound + '轮 · 连胜' + state.currentWinStreak + ' · 连败' + state.currentLoseStreak,
+                  '总胜率 ' + (state.totalWins/(state.totalWins+state.totalLosses)*100).toFixed(1) + '%'
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`[WS] 📣 交替第${state.altRound}轮预测: ${dirLabel} ${confText}`);
+              }
+            } else {
+              log(`[WS] 📊 交替模式结束: 第${state.altRound}轮后断裂`, 'warn');
+              state.altModeActive = false;
+              state.altRound = 0;
+              state.altPushCount = 0;
+            }
+          } else {
+            if (state.altLastResult && curResult !== state.altLastResult) {
+              state.altPushCount++;
+            } else if (state.altLastResult === null || curResult !== state.altLastResult) {
+              state.altPushCount = 1;
+            }
+            state.altLastResult = curResult;
+
+            if (state.altPushCount >= state.altPushThreshold) {
+              state.altModeActive = true;
+              state.altRound = state.altPushCount;
+              state.altForcePush = true;
+
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = ball.height + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 监控 | ' + timeNow(),
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（交替触发·第' + state.altRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  '💡 ' + altHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ 输赢交替 ━━━',
+                  '⚡ 连续 ' + state.altPushCount + ' 次交替 → 开始持续推送',
+                  '连胜 ' + state.currentWinStreak + ' · 连败 ' + state.currentLoseStreak + ' · 总胜率 ' + (state.totalWins/(state.totalWins+state.totalLosses)*100).toFixed(1) + '%'
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`[WS] 📣 交替触发: 第${state.altRound}轮 · ${dirLabel} ${confText}`);
+              }
+            }
+          }
+        }
+
+        // ===== AA结构推送（同 handleBlock 逻辑） =====
+        if (state.aaPushEnabled) {
+          const curResult = isCorrect ? 'W' : 'L';
+
+          if (state.aaModeActive) {
+            if (curResult === state.aaLastResult) {
+              state.aaRound++;
+              state.aaForcePush = true;
+              state.aaLastResult = curResult;
+
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = ball.height + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const aaTypeLabel = curResult === 'W' ? '🟢连赢' : '🔴连败';
+                const aaHint = curResult === 'W' ? '💡 连赢趋势中 → 反着买' : '💡 连败趋势中 → 顺着买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 监控 | ' + timeNow(),
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（AA第' + state.aaRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  aaHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ AA结构 ━━━',
+                  '🔁 连续 ' + state.aaCount + ' 次' + aaTypeLabel + ' · 第' + state.aaRound + '轮',
+                  '连胜 ' + state.currentWinStreak + ' · 连败 ' + state.currentLoseStreak
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`[WS] 📣 AA第${state.aaRound}轮: ${aaTypeLabel} · ${dirLabel} ${confText}`);
+              }
+            } else {
+              log(`[WS] 📊 AA模式结束: 第${state.aaRound}轮后断裂`, 'warn');
+              state.aaModeActive = false;
+              state.aaRound = 0;
+              state.aaCount = 0;
+            }
+          } else {
+            if (state.aaLastResult && curResult === state.aaLastResult) {
+              state.aaCount++;
+            } else {
+              state.aaCount = 1;
+            }
+            state.aaLastResult = curResult;
+
+            if (state.aaCount >= state.aaPushThreshold) {
+              state.aaModeActive = true;
+              state.aaRound = state.aaCount;
+              state.aaForcePush = true;
+
+              if (dingtalk.hasValidDingWebhook() && finalPred) {
+                const nextHeight = ball.height + 20;
+                const dirLabel = finalPred === 'single' ? '单' : '双';
+                const confText = (combinedConf * 100).toFixed(1) + '%';
+                const lastPredLabel = finalPred === 'single' ? '单' : '双';
+                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
+                const aaTypeLabel = curResult === 'W' ? '🟢连赢' : '🔴连败';
+                const aaHint = curResult === 'W' ? '💡 连赢趋势中 → 反着买' : '💡 连败趋势中 → 顺着买';
+                const recentBalls = state.balls.slice(-100);
+                const recentWins = recentBalls.filter(b => b.resultMark === 'W').length;
+                const recentSingles = recentBalls.filter(b => b.parity === 'single').length;
+                const recentDoubles = recentBalls.filter(b => b.parity === 'double').length;
+                const recentRate = recentBalls.length > 0 ? (recentWins / recentBalls.length * 100).toFixed(1) : '-';
+                const parts = [
+                  '📊 监控 | ' + timeNow(),
+                  '━━━━━━━━━━━━━━',
+                  '🔮 下期预测（AA触发·第' + state.aaRound + '轮）',
+                  '━━━ 上次结果 ━━━',
+                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '━━━ 下次预测 ━━━',
+                  '🎯 预测：' + dirLabel + '  |  置信：' + confText,
+                  '📍 目标高度：#' + nextHeight,
+                  aaHint,
+                  '📊 近100球: ' + recentRate + '%  |  单' + recentSingles + '双' + recentDoubles,
+                  '━━━ AA结构 ━━━',
+                  '🔁 连续 ' + state.aaCount + ' 次' + aaTypeLabel + ' → 开始持续推送',
+                  '连胜 ' + state.currentWinStreak + ' · 连败 ' + state.currentLoseStreak
+                ];
+                dingtalk.sendDingTalkMessage(parts.join('\n'), log);
+                log(`[WS] 📣 AA触发: 第${state.aaRound}轮 · ${aaTypeLabel} · ${dirLabel} ${confText}`);
+              }
+            }
+          }
+        }
+
+        // 更新规则统计
+        for (const ro of engineResult.ruleOutputs) {
+          if (ro.ruleId && !ro.ruleId.startsWith('DRAGON')) {
+            if (!state.ruleStats[ro.ruleId]) {
+              state.ruleStats[ro.ruleId] = { name: ro.ruleName, used: 0, wins: 0, losses: 0 };
+            }
+            state.ruleStats[ro.ruleId].used++;
+            if (isCorrect) state.ruleStats[ro.ruleId].wins++;
+            else state.ruleStats[ro.ruleId].losses++;
+            engine.recentPerformance.recordResult(ro.ruleId, isCorrect);
+          }
+        }
+
+        // 推送结果
+        dingtalk.updateDingRuntime(state.currentLoseStreak, state.currentWinStreak, ball.resultMark);
+        if (dingtalk.hasValidDingWebhook() && ball.height > state.highestPushedHeight) {
+          state.highestPushedHeight = ball.height;
+          await pushResult(ball, finalPred, combinedConf, engineResult, isCorrect);
+        }
+
+        // 推送下期预测
+        if (dingtalk.hasValidDingWebhook()) {
+          await pushNextPredictionNow();
+        }
+      }
+
+      predictionSnapshot.unshift({
+        time: ball.timeStr,
+        height: ball.height,
+        prediction: finalPred ? engine.parityToLabel(finalPred) : '-',
+        actual: ball.parity ? engine.parityToLabel(ball.parity) : '-',
+        result: ball.resultMark,
+        confidence: combinedConf ? (combinedConf * 100).toFixed(1) + '%' : '-'
+      });
+      if (predictionSnapshot.length > 100) predictionSnapshot.pop();
+    } else {
+      log(`[WS] 首球记录: #${ball.height}（无历史数据）`);
+    }
+  } catch (err) {
+    log(`[WS] 处理错误: ${err.message}`, 'error');
+  }
+}
+
 function startPolling() {
   if (isPolling) return;
   isPolling = true;
@@ -609,7 +963,19 @@ app.get('/api/status', (req, res) => {
     streakPushThreshold: state.streakPushThreshold,
     altPushEnabled: state.altPushEnabled,
     altPushThreshold: state.altPushThreshold,
-    altPushCount: state.altPushCount
+    altPushCount: state.altPushCount,
+    aaPushEnabled: state.aaPushEnabled,
+    aaPushThreshold: state.aaPushThreshold,
+    aaCount: state.aaCount,
+    aaRound: state.aaRound,
+    aaModeActive: state.aaModeActive,
+    // WebSocket 状态
+    wsConnected: wsListener ? wsListener.getStatus().connected : false,
+    wsLastBlock: wsListener ? wsListener.getStatus().lastBlockNum : 0,
+    wsMessageCount: wsListener ? wsListener.getStatus().messageCount : 0,
+    // 倒计时
+    countdown: countdownValue,
+    countdownRunning: countdownRunning
   });
 });
 
@@ -770,7 +1136,12 @@ app.get('/api/config', (req, res) => {
     streakPushThreshold: state.streakPushThreshold,
     altPushEnabled: state.altPushEnabled,
     altPushThreshold: state.altPushThreshold,
-    altPushCount: state.altPushCount
+    altPushCount: state.altPushCount,
+    aaPushEnabled: state.aaPushEnabled,
+    aaPushThreshold: state.aaPushThreshold,
+    aaCount: state.aaCount,
+    aaRound: state.aaRound,
+    aaModeActive: state.aaModeActive
   });
 });
 
@@ -998,5 +1369,50 @@ app.listen(PORT, '0.0.0.0', () => {
   log(`📊 当前数据: ${state.balls.length} 个球, ${state.totalWins}胜/${state.totalLosses}负`);
   // 自动开始轮询
   startPolling();
-	  // 预测推送由 handleBlock 处理新区块时自动触发，无需单独安排
+
+  // 启动 WebSocket 实时监听（主数据源）
+  wsListener = new V2hs9Listener(log);
+  wsListener.on('block', async (blockData) => {
+    try {
+      // 有趣区块到达 → 重置倒计时
+      if (fetcher.isInterestingHeight(blockData.height)) {
+        resetCountdown();
+        log(`⚡ [WS] 收到实时区块 #${blockData.height} (${blockData.parity})`);
+      }
+
+      // 检查是否已处理过
+      if (!fetcher.isInterestingHeight(blockData.height)) return;
+      if (state.balls.some(b => b.height === blockData.height)) return;
+
+      // 构造 ball 对象并处理
+      const parityParsed = engine.deriveParityFromHash(blockData.blockHash);
+      const ball = {
+        height: blockData.height,
+        blockHash: blockData.blockHash,
+        parity: blockData.parity,
+        lastChar: parityParsed.lastChar,
+        numericValue: parityParsed.numericValue,
+        time: blockData.timestamp,
+        timeStr: blockData.timeStr,
+        prediction: null,
+        resultMark: null,
+        ruleResults: [],
+        dingTalkSent: false
+      };
+
+      storage.addBall(ball);
+      state.lastKnownBlockHeight = blockData.height;
+
+      // 跟轮询一样的处理逻辑
+      const history = state.balls.slice(0, -1);
+      if (history.length > 0) {
+        await processWebSocketBlock(ball, history);
+      }
+
+      storage.saveState();
+    } catch (err) {
+      log(`[WS] 处理区块错误: ${err.message}`, 'error');
+    }
+  });
+  wsListener.start();
 });
