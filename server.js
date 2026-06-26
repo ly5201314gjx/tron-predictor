@@ -279,6 +279,38 @@ async function processNewBlocks() {
   }
 }
 
+// 计算下一期预测（供推送消息使用，避免用当前球的 finalPred 代替）
+function computeNextPrediction() {
+  const balls = storage.getBalls();
+  if (balls.length < 1) return null;
+  const er = engine.runPredictionEngine(balls, {
+    ruleEnabled: state.ruleEnabled,
+    ruleReversed: state.ruleReversed,
+    ruleStats: state.ruleStats
+  });
+  let pred = er.finalPrediction;
+  let conf = er.combinedConfidence;
+  if (!pred) return null;
+  if (state.reverseModeEnabled && state.reversePhase) {
+    pred = engine.reverseParity(pred);
+  }
+  if (state.periodDetectionEnabled) {
+    const pd = engine.applyPeriodDetection(balls, { finalPrediction: pred, combinedConfidence: conf }, {
+      window: state.periodDetectionWindow,
+      threshold: state.periodDetectionThreshold,
+      boost: state.periodDetectionBoost
+    });
+    pred = pd.pred;
+    conf = pd.conf;
+  }
+  return {
+    pred,
+    conf,
+    label: engine.parityToLabel(pred),
+    confText: (conf * 100).toFixed(1) + '%'
+  };
+}
+
 async function handleBlock(block) {
   const rawNumber = block?.block_header?.raw_data?.number;
   const blockID = block?.blockID;
@@ -342,6 +374,9 @@ async function handleBlock(block) {
 
       let finalPred = engineResult.finalPrediction;
       let combinedConf = engineResult.combinedConfidence;
+
+      // 计算下一期预测（推送消息用，不复用 finalPred）
+      const np = computeNextPrediction();
 
       if (state.reverseModeEnabled && finalPred && state.reversePhase) {
         finalPred = engine.reverseParity(finalPred);
@@ -424,10 +459,8 @@ async function handleBlock(block) {
               // 推送带交替轮次的预测
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = rawNumber + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
                 const recentBalls = state.balls.slice(-100);
@@ -440,7 +473,7 @@ async function handleBlock(block) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（交替 第' + state.altRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + rawNumber + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + rawNumber + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
@@ -477,10 +510,8 @@ async function handleBlock(block) {
 
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = rawNumber + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
                 const recentBalls = state.balls.slice(-100);
@@ -493,7 +524,7 @@ async function handleBlock(block) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（交替触发·第' + state.altRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + rawNumber + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + rawNumber + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
@@ -595,6 +626,9 @@ async function processWebSocketBlock(ball, history) {
       let finalPred = engineResult.finalPrediction;
       let combinedConf = engineResult.combinedConfidence;
 
+      // 计算下一期预测（推送消息用，不复用 finalPred）
+      const np = computeNextPrediction();
+
       if (state.reverseModeEnabled && finalPred && state.reversePhase) {
         finalPred = engine.reverseParity(finalPred);
       }
@@ -671,10 +705,8 @@ async function processWebSocketBlock(ball, history) {
 
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = ball.height + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
                 const recentBalls = state.balls.slice(-100);
@@ -687,7 +719,7 @@ async function processWebSocketBlock(ball, history) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（交替 第' + state.altRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + ball.height + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
@@ -721,10 +753,8 @@ async function processWebSocketBlock(ball, history) {
 
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = ball.height + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const altHint = isCorrect ? '✅ 上次预测正确 → 跟着买' : '❌ 上次预测失败 → 反买';
                 const recentBalls = state.balls.slice(-100);
@@ -737,7 +767,7 @@ async function processWebSocketBlock(ball, history) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（交替触发·第' + state.altRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + ball.height + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
@@ -766,10 +796,8 @@ async function processWebSocketBlock(ball, history) {
 
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = ball.height + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const aaTypeLabel = curResult === 'W' ? '🟢连赢' : '🔴连败';
                 const aaHint = curResult === 'W' ? '💡 连赢趋势中 → 反着买' : '💡 连败趋势中 → 顺着买';
@@ -783,7 +811,7 @@ async function processWebSocketBlock(ball, history) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（AA第' + state.aaRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + ball.height + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
@@ -817,10 +845,8 @@ async function processWebSocketBlock(ball, history) {
 
               if (dingtalk.hasValidDingWebhook() && finalPred) {
                 const nextHeight = ball.height + 20;
-                const dirLabel = finalPred === 'single' ? '单' : '双';
-                const confText = (combinedConf * 100).toFixed(1) + '%';
-                const lastPredLabel = finalPred === 'single' ? '单' : '双';
-                const actualLabel = ball.parity === 'single' ? '单' : '双';
+                const dirLabel = np ? np.label : (finalPred === 'single' ? '单' : '双');
+                const confText = np ? np.confText : (combinedConf * 100).toFixed(1) + '%';
                 const lastResultLabel = isCorrect ? '✅ 胜' : '❌ 负';
                 const aaTypeLabel = curResult === 'W' ? '🟢连赢' : '🔴连败';
                 const aaHint = curResult === 'W' ? '💡 连赢趋势中 → 反着买' : '💡 连败趋势中 → 顺着买';
@@ -834,7 +860,7 @@ async function processWebSocketBlock(ball, history) {
                   '━━━━━━━━━━━━━━',
                   '🔮 下期预测（AA触发·第' + state.aaRound + '轮）',
                   '━━━ 上次结果 ━━━',
-                  '📍 高度 #' + ball.height + '  预测:' + lastPredLabel + ' 实际:' + actualLabel + ' → ' + lastResultLabel,
+                  '📍 #' + ball.height + ' ' + lastResultLabel,
                   '━━━ 下次预测 ━━━',
                   '🎯 预测：' + dirLabel + '  |  置信：' + confText,
                   '📍 目标高度：#' + nextHeight,
