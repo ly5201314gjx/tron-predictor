@@ -1094,6 +1094,8 @@ app.get('/api/next-prediction', (req, res) => {
 
   const dragonInfo = engine.getDragonInfo(balls);
   const ruleCount = engineResult.ruleOutputs.filter(r => !r.ruleId.startsWith('DRAGON')).length;
+  const lastHeight = balls[balls.length - 1].height;
+  const targetHeight = lastHeight + 20;
 
   res.json({
     prediction: finalPred,
@@ -1107,7 +1109,8 @@ app.get('/api/next-prediction', (req, res) => {
     reversePhase: state.reversePhase,
     usedReverse,
     totalBalls: balls.length,
-    circuitBreakerArmed: state.circuitBreakerArmed
+    circuitBreakerArmed: state.circuitBreakerArmed,
+    targetHeight
   });
 });
 
