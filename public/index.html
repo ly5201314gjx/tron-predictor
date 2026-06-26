@@ -6,10 +6,32 @@
 <title>波场单双预测系统</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333;font-size:14px}
-.wrap{max-width:1200px;margin:0 auto;padding:16px}
-.header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:16px 20px;border-radius:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.header h1{font-size:18px}.header .sub{font-size:11px;opacity:.7}
+body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333;font-size:14px;display:flex;min-height:100vh}
+
+/* ===== 侧栏 ===== */
+.sidebar{width:200px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#fff;display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:width .2s}
+.sidebar-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar-logo h2{font-size:16px;font-weight:800;line-height:1.3}
+.sidebar-logo .sub{font-size:10px;color:rgba(255,255,255,.5);margin-top:2px}
+.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:13px;color:rgba(255,255,255,.65);transition:all .15s;border-left:3px solid transparent;user-select:none}
+.sidebar-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.sidebar-item.active{background:rgba(255,255,255,.12);color:#fff;border-left-color:#818cf8;font-weight:600}
+.sidebar-item .icon{font-size:18px;width:24px;text-align:center}
+.sidebar-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);font-size:9px;color:rgba(255,255,255,.3)}
+
+/* ===== 主内容 ===== */
+.main{flex:1;margin-left:200px;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .2s}
+.topbar{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center}
+.topbar h1{font-size:18px}.topbar .sub{font-size:11px;opacity:.7}
+.content{flex:1;padding:20px 24px;overflow-y:auto}
+
+/* ===== Tab 内容 ===== */
+.tab-content{display:none;animation:fadeIn .2s ease}
+.tab-content.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== 卡片 ===== */
 .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .card h2{font-size:14px;margin-bottom:8px;color:#444;display:flex;justify-content:space-between;align-items:center}
 .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -25,7 +47,6 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
 .btn-sm{padding:3px 8px;font-size:10px}
 .btn-outline{background:transparent;border:1px solid #ddd;color:#666}.btn-outline:hover{background:#f5f5f5}
 .grid{display:grid;gap:8px}.cols-2{grid-template-columns:1fr 1fr}
-@media(max-width:700px){.cols-2{grid-template-columns:1fr}}
 .tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600}
 .tag-green{background:#d1fae5;color:#059669}.tag-red{background:#fee2e2;color:#dc2626}
 .tag-blue{background:#dbeafe;color:#2563eb}
@@ -41,13 +62,13 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
 #dataTable{width:100%;border-collapse:collapse;font-size:11px}
 #dataTable th{background:#f8f9ff;padding:4px 6px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #eee;position:sticky;top:0;z-index:1}
 #dataTable td{padding:3px 6px;border-bottom:1px solid #f0f0f0}#dataTable tr:hover{background:#fafbff}
-#predictionList{max-height:160px;overflow-y:auto;padding-right:4px}
+#predictionList{max-height:200px;overflow-y:auto;padding-right:4px}
 #predictionList::-webkit-scrollbar{width:4px}#predictionList::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
-#logsBox{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:8px;font-family:monospace;font-size:10px;max-height:120px;overflow-y:auto;line-height:1.5}
+#logsBox{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:8px;font-family:monospace;font-size:10px;max-height:400px;overflow-y:auto;line-height:1.5}
 #logsBox::-webkit-scrollbar{width:4px}#logsBox::-webkit-scrollbar-thumb{background:#555;border-radius:2px}
 .rule-item{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid #f5f5f5;font-size:11px}
 .rule-item input[type=checkbox]{width:12px;height:12px;cursor:pointer}
-#rulesList{max-height:260px;overflow-y:auto;padding-right:4px}
+#rulesList{max-height:500px;overflow-y:auto;padding-right:4px}
 #rulesList::-webkit-scrollbar{width:4px}#rulesList::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
 #backtestResult{padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-top:6px;font-size:12px}
 .bt-table{width:100%;border-collapse:collapse;font-size:10px;margin-top:4px}
@@ -64,15 +85,43 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
 .dot-green{background:#34d399;animation:pulse 1.5s infinite}
 .dot-gray{background:#ccc}
-@keyframes pulse{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
+@keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 @keyframes countdownPulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
 .countdown-active{animation:countdownPulse 1s ease-in-out infinite}
+
+/* ===== 响应式 ===== */
+@media(max-width:800px){
+  .sidebar{width:56px}
+  .sidebar-logo h2,.sidebar-logo .sub,.sidebar-item span:not(.icon),.sidebar-footer{display:none}
+  .sidebar-item{justify-content:center;padding:11px 0}
+  .sidebar-item .icon{margin:0}
+  .main{margin-left:56px}
+  .cols-2{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="header">
-    <div><h1>🌊 波场单双预测</h1><div class="sub">61 条规则 · 实时监控</div></div>
+
+<!-- ===== 侧栏导航 ===== -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <h2>🌊 TRON</h2>
+    <div class="sub">61 条规则 · 实时监控</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="sidebar-item active" onclick="switchTab('dashboard')"><span class="icon">📊</span><span>仪表盘</span></div>
+    <div class="sidebar-item" onclick="switchTab('rules')"><span class="icon">🎯</span><span>规则管理</span></div>
+    <div class="sidebar-item" onclick="switchTab('settings')"><span class="icon">⚙️</span><span>系统设置</span></div>
+    <div class="sidebar-item" onclick="switchTab('analytics')"><span class="icon">📈</span><span>分析</span></div>
+  </div>
+  <div class="sidebar-footer">TRON Predictor v2.2</div>
+</div>
+
+<!-- ===== 主内容区 ===== -->
+<div class="main">
+  <!-- 顶部栏 -->
+  <div class="topbar">
+    <div><h1>🌊 波场单双预测</h1><div class="sub">零延迟 · 智能预测 · 理性决策</div></div>
     <div class="flex">
       <span id="liveClock" style="font-family:monospace;font-size:14px;font-weight:700;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:6px;"></span>
       <button class="btn btn-success btn-sm" onclick="togglePoll()" id="pollBtn">启动</button>
@@ -80,189 +129,227 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
     </div>
   </div>
 
-  <div class="card" style="padding:10px 14px;">
-    <div class="status-bar">
-      <span><span class="dot dot-green" id="liveDot"></span><span id="liveStatus">加载中...</span></span>
-      <span id="statsText">球: - | 胜率: -</span>
-      <span id="streakText"></span>
-      <span id="refreshInfo"></span>
-      <!-- 倒计时由圆环显示 -->
-    </div>
-  </div>
+  <div class="content">
 
-  <div class="prediction-box">
-    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+    <!-- ========== TAB 1: 仪表盘 ========== -->
+    <div class="tab-content active" id="tab-dashboard">
 
-      <!-- 倒计时圆环 -->
-      <div style="position:relative;flex-shrink:0;">
-        <svg width="90" height="90" viewBox="0 0 90 90" style="transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(255,255,255,0.3));">
-          <circle cx="45" cy="45" r="38" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="7"/>
-          <circle id="countdownRing" cx="45" cy="45" r="38" fill="none" stroke="#22c55e" stroke-width="7"
-            stroke-dasharray="238.76" stroke-dashoffset="0" stroke-linecap="round"
-            style="transition:stroke-dashoffset 1s linear,stroke 0.5s;"/>
-        </svg>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
-          <div id="countdownNum" style="font-size:28px;font-weight:900;color:#22c55e;line-height:1;text-shadow:0 0 10px rgba(34,197,94,0.6);">00</div>
-          <div style="font-size:8px;color:rgba(255,255,255,0.8);letter-spacing:1px;font-weight:600;">SEC</div>
+      <div class="card" style="padding:10px 14px;">
+        <div class="status-bar">
+          <span><span class="dot dot-green" id="liveDot"></span><span id="liveStatus">加载中...</span></span>
+          <span id="statsText">球: - | 胜率: -</span>
+          <span id="streakText"></span>
+          <span id="refreshInfo"></span>
         </div>
       </div>
 
-      <!-- 预测方向 -->
-      <div style="text-align:center;min-width:60px;">
-        <div style="font-size:10px;color:#8b5cf6;">下一球</div>
-        <div id="npDir" style="font-size:36px;font-weight:900;line-height:1.2;">-</div>
+      <div class="prediction-box">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+          <div style="position:relative;flex-shrink:0;">
+            <svg width="90" height="90" viewBox="0 0 90 90" style="transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(255,255,255,0.3));">
+              <circle cx="45" cy="45" r="38" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="7"/>
+              <circle id="countdownRing" cx="45" cy="45" r="38" fill="none" stroke="#22c55e" stroke-width="7"
+                stroke-dasharray="238.76" stroke-dashoffset="0" stroke-linecap="round"
+                style="transition:stroke-dashoffset 1s linear,stroke 0.5s;"/>
+            </svg>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
+              <div id="countdownNum" style="font-size:28px;font-weight:900;color:#22c55e;line-height:1;text-shadow:0 0 10px rgba(34,197,94,0.6);">00</div>
+              <div style="font-size:8px;color:rgba(255,255,255,0.8);letter-spacing:1px;font-weight:600;">SEC</div>
+            </div>
+          </div>
+          <div style="text-align:center;min-width:60px;">
+            <div style="font-size:10px;color:#8b5cf6;">下一球</div>
+            <div id="npDir" style="font-size:36px;font-weight:900;line-height:1.2;">-</div>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+            <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npConf" style="font-size:16px;">-</div><div class="lbl">置信</div></div>
+            <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npRul" style="font-size:16px;">-</div><div class="lbl">规则</div></div>
+            <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npDrag" style="font-size:16px;">-</div><div class="lbl">长龙</div></div>
+            <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npBal" style="font-size:16px;">-</div><div class="lbl">基数</div></div>
+          </div>
+          <div style="text-align:center;min-width:120px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:4px 10px;">
+            <div style="font-size:9px;color:#7c3aed;font-weight:600;letter-spacing:1px;">TARGET</div>
+            <div id="npTarget" style="font-size:18px;font-weight:900;color:#7c3aed;line-height:1.2;font-family:monospace;">-</div>
+          </div>
+          <div id="npMode" style="font-size:11px;color:#7c3aed;font-weight:600;text-align:center;min-width:60px;"></div>
+        </div>
       </div>
-      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
-        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npConf" style="font-size:16px;">-</div><div class="lbl">置信</div></div>
-        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npRul" style="font-size:16px;">-</div><div class="lbl">规则</div></div>
-        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npDrag" style="font-size:16px;">-</div><div class="lbl">长龙</div></div>
-        <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npBal" style="font-size:16px;">-</div><div class="lbl">基数</div></div>
-      </div>
-      <!-- 目标高度 -->
-      <div style="text-align:center;min-width:120px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:4px 10px;">
-        <div style="font-size:9px;color:#7c3aed;font-weight:600;letter-spacing:1px;">TARGET</div>
-        <div id="npTarget" style="font-size:18px;font-weight:900;color:#7c3aed;line-height:1.2;font-family:monospace;">-</div>
-      </div>
-      <div id="npMode" style="font-size:11px;color:#7c3aed;font-weight:600;text-align:center;min-width:60px;"></div>
-    </div>
-  </div>
 
-  <div class="grid cols-2">
-    <div class="card" style="padding:10px 14px;">
-      <h2>📜 预测历史</h2>
-      <div id="predictionList"><div style="color:#999;font-size:12px;padding:8px;text-align:center;">加载中...</div></div>
-    </div>
-    <div class="card" style="padding:10px 14px;">
-      <h2>🎱 球池 <span id="ballCount" style="font-size:10px;color:#999;font-weight:400;"></span></h2>
-      <div id="ballPool"></div>
-    </div>
-  </div>
+      <div class="grid cols-2">
+        <div class="card" style="padding:10px 14px;">
+          <h2>📜 预测历史</h2>
+          <div id="predictionList"><div style="color:#999;font-size:12px;padding:8px;text-align:center;">加载中...</div></div>
+        </div>
+        <div class="card" style="padding:10px 14px;">
+          <h2>🎱 球池 <span id="ballCount" style="font-size:10px;color:#999;font-weight:400;"></span></h2>
+          <div id="ballPool"></div>
+        </div>
+      </div>
 
-  <div class="card" style="padding:10px 14px;">
-    <h2>📋 明细</h2>
-    <div style="max-height:200px;overflow-y:auto;">
-      <table id="dataTable"><thead><tr><th>时间</th><th>高度</th><th>结果</th><th>预测</th><th>状态</th></tr></thead><tbody id="dataBody"></tbody></table>
-    </div>
-  </div>
+      <div class="card" style="padding:10px 14px;">
+        <h2>📋 明细</h2>
+        <div style="max-height:300px;overflow-y:auto;">
+          <table id="dataTable"><thead><tr><th>时间</th><th>高度</th><th>结果</th><th>预测</th><th>状态</th></tr></thead><tbody id="dataBody"></tbody></table>
+        </div>
+      </div>
 
-  <div class="grid cols-2">
-    <div class="card" style="padding:10px 14px;">
-      <h2>⚙️ 设置</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
-        <div><label style="font-size:11px;">熔断阈值</label>
-          <select id="cbThreshold" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
-            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
-        </div>
-        <div><label style="font-size:11px;">轮询(ms)</label>
-          <input id="pollInterval" type="number" value="8000" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
-        </div>
-      </div>
-      <div class="flex" style="margin-bottom:8px;">
-        <label class="switch"><input type="checkbox" id="cbEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">旧熔断</span>
-        <label class="switch" style="margin-left:12px;"><input type="checkbox" id="revEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">逆向</span>
-      </div>
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div class="flex" style="margin-bottom:4px;">
-          <label class="switch"><input type="checkbox" id="smartBreakerEnable" onchange="updCfg()"><span class="slider"></span></label>
-          <span style="font-size:11px;font-weight:600;color:#1e40af;">⚡ 智能熔断</span>
-          <span id="smartStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
-        </div>
-        <div class="flex gap" style="font-size:11px;">
-          <span>连败 ≥ <select id="smartThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
-          </select> 冷却</span>
-          <span><select id="smartCooldown" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
-          </select> 个区块</span>
-        </div>
-        <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：连败2次冷却1块 · 胜率+0.6% 最高连败降9</div>
-      </div>
-      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div class="flex" style="margin-bottom:4px;">
-          <label class="switch"><input type="checkbox" id="streakPushEnable" onchange="updCfg()"><span class="slider"></span></label>
-          <span style="font-size:11px;font-weight:600;color:#166534;">📶 连胜连败推送</span>
-        </div>
-        <div class="flex gap" style="font-size:11px;">
-          <span>连{''}胜或连败 ≥ <select id="streakPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
-          </select> 次</span>
-          <span style="color:#999;">才推钉钉</span>
-        </div>
-        <div style="font-size:9px;color:#6b7280;margin-top:3px;">开启后：未达阈值不推送，达到后推送提醒</div>
-      </div>
-      <div style="background:#fdf4ff;border:1px solid #d946ef;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div class="flex" style="margin-bottom:4px;">
-          <label class="switch"><input type="checkbox" id="altPushEnable" onchange="updCfg()"><span class="slider"></span></label>
-          <span style="font-size:11px;font-weight:600;color:#86198f;">🔀 输赢交替推送</span>
-        </div>
-        <div class="flex gap" style="font-size:11px;">
-          <span>交替 ≥ <select id="altPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
-          </select> 次</span>
-          <span style="color:#999;">才推钉钉</span>
-        </div>
-        <div style="font-size:9px;color:#6b7280;margin-top:3px;">一赢一输算1次交替，达到后推送提醒</div>
-      </div>
-      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div class="flex" style="margin-bottom:4px;">
-          <label class="switch"><input type="checkbox" id="periodDetectionEnable" onchange="updCfg()"><span class="slider"></span></label>
-          <span style="font-size:11px;font-weight:600;color:#92400e;">📊 周期检测</span>
-          <span id="periodStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
-        </div>
-        <div class="flex gap" style="font-size:11px;">
-          <span>窗口 <select id="periodWindow" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="30">30</option><option value="50" selected>50</option><option value="80">80</option>
-          </select>球</span>
-          <span>偏移 ≥ <select id="periodThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="0.05">5%</option><option value="0.08" selected>8%</option><option value="0.12">12%</option>
-          </select></span>
-          <span>加权 <select id="periodBoost" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
-            <option value="0.10">0.10</option><option value="0.15">0.15</option><option value="0.20">0.20</option><option value="0.25" selected>0.25</option>
-          </select></span>
-        </div>
-        <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：窗口50 阈值8% 加权0.25 · 胜率+0.8% 连败≥5减半</div>
-      </div>
-      <h2 style="margin-top:8px;font-size:13px;">🔔 钉钉 <span style="font-weight:400;font-size:10px;color:#059669;">✓ 已绑定</span></h2>
-      <input id="dingWebhook" type="text" placeholder="已锁定" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-bottom:4px;background:#f0fdf4;color:#059669;font-weight:600;" readonly disabled>
-      <div class="flex" style="flex-wrap:wrap;margin-bottom:4px;">
-        <label style="font-size:11px;"><input type="checkbox" id="dingHighRate" onchange="updCfg()"> 高胜率推送</label>
-        <span style="font-size:11px;">阈值 ≥ <input id="dingHighTh" type="number" value="55" min="1" max="100" style="width:38px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()">%</span>
-        <label style="font-size:11px;margin-left:6px;"><input type="checkbox" id="dingFail" onchange="updCfg()"> 连败</label>
-        <span style="font-size:11px;">阈值 <input id="dingFailTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
-        <label style="font-size:11px;"><input type="checkbox" id="dingWin" onchange="updCfg()"> 连胜</label>
-        <span style="font-size:11px;">阈值 <input id="dingWinTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
-      </div>
-      <div style="font-size:10px;color:#999;margin-top:2px;">推送关键词「监控」· 规则平均胜率 ≥ 阈值时推送</div>
     </div>
-    <div class="card" style="padding:10px 14px;">
-      <h2>📏 规则 (61)</h2>
-      <div class="flex gap" style="margin-bottom:4px;">
-        <button class="btn btn-sm btn-success" onclick="batch('enableAll')">全启用</button>
-        <button class="btn btn-sm btn-warn" onclick="disableLow()">禁低胜率</button>
-        <button class="btn btn-sm btn-outline" onclick="batch('clearReversed')">清逆向</button>
-      </div>
-      <div id="rulesList"></div>
-    </div>
-  </div>
 
-  <div class="card" style="padding:10px 14px;">
-    <h2>📈 回测</h2>
-    <div class="flex">
-      <span style="font-size:11px;">球:</span>
-      <input id="btCount" type="number" value="100" min="10" max="2000" style="width:50px;padding:2px;border:1px solid #ddd;border-radius:4px;font-size:11px;">
-      <button class="btn btn-primary btn-sm" onclick="runBt()">回测</button>
-      <button class="btn btn-danger btn-sm" onclick="clearData()">清数据</button>
-    </div>
-    <div id="backtestResult"></div>
-  </div>
+    <!-- ========== TAB 2: 规则管理 ========== -->
+    <div class="tab-content" id="tab-rules">
 
-  <div class="card" style="padding:10px 14px;">
-    <h2>📝 日志 <button class="btn btn-sm btn-outline" onclick="$('logsBox').innerHTML=''">清</button></h2>
-    <div id="logsBox"></div>
+      <div class="card" style="padding:14px;">
+        <h2>📏 规则管理 <span style="font-weight:400;font-size:11px;color:#999;">61 条规则引擎</span></h2>
+        <div class="flex gap" style="margin-bottom:8px;">
+          <button class="btn btn-sm btn-success" onclick="batch('enableAll')">全启用</button>
+          <button class="btn btn-sm btn-warn" onclick="disableLow()">禁低胜率</button>
+          <button class="btn btn-sm btn-outline" onclick="batch('clearReversed')">清逆向</button>
+        </div>
+        <div id="rulesList"></div>
+      </div>
+
+    </div>
+
+    <!-- ========== TAB 3: 系统设置 ========== -->
+    <div class="tab-content" id="tab-settings">
+
+      <div class="grid cols-2">
+        <div class="card" style="padding:14px;">
+          <h2>⚡ 熔断保护</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+            <div><label style="font-size:11px;">熔断阈值</label>
+              <select id="cbThreshold" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
+                <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+            </div>
+            <div><label style="font-size:11px;">轮询(ms)</label>
+              <input id="pollInterval" type="number" value="8000" style="width:100%;padding:3px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-top:2px;" onchange="updCfg()">
+            </div>
+          </div>
+          <div class="flex" style="margin-bottom:10px;">
+            <label class="switch"><input type="checkbox" id="cbEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">旧熔断</span>
+            <label class="switch" style="margin-left:12px;"><input type="checkbox" id="revEnable" onchange="updCfg()"><span class="slider"></span></label><span style="font-size:11px;">逆向</span>
+          </div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px;margin-bottom:8px;">
+            <div class="flex" style="margin-bottom:4px;">
+              <label class="switch"><input type="checkbox" id="smartBreakerEnable" onchange="updCfg()"><span class="slider"></span></label>
+              <span style="font-size:12px;font-weight:600;color:#1e40af;">⚡ 智能熔断</span>
+              <span id="smartStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
+            </div>
+            <div class="flex gap" style="font-size:11px;">
+              <span>连败 ≥ <select id="smartThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+              </select> 冷却</span>
+              <span><select id="smartCooldown" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+              </select> 个区块</span>
+            </div>
+            <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：连败2次冷却1块 · 胜率+0.6% 最高连败降9</div>
+          </div>
+          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:10px;">
+            <div class="flex" style="margin-bottom:4px;">
+              <label class="switch"><input type="checkbox" id="periodDetectionEnable" onchange="updCfg()"><span class="slider"></span></label>
+              <span style="font-size:12px;font-weight:600;color:#92400e;">📊 周期检测</span>
+              <span id="periodStatus" style="font-size:9px;margin-left:6px;color:#999;"></span>
+            </div>
+            <div class="flex gap" style="font-size:11px;">
+              <span>窗口 <select id="periodWindow" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="30">30</option><option value="50" selected>50</option><option value="80">80</option>
+              </select>球</span>
+              <span>偏移 ≥ <select id="periodThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="0.05">5%</option><option value="0.08" selected>8%</option><option value="0.12">12%</option>
+              </select></span>
+              <span>加权 <select id="periodBoost" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="0.10">0.10</option><option value="0.15">0.15</option><option value="0.20">0.20</option><option value="0.25" selected>0.25</option>
+              </select></span>
+            </div>
+            <div style="font-size:9px;color:#6b7280;margin-top:3px;">回测最优：窗口50 阈值8% 加权0.25 · 胜率+0.8% 连败≥5减半</div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;">
+          <h2>🔔 推送配置</h2>
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px;margin-bottom:8px;">
+            <div class="flex" style="margin-bottom:4px;">
+              <label class="switch"><input type="checkbox" id="streakPushEnable" onchange="updCfg()"><span class="slider"></span></label>
+              <span style="font-size:12px;font-weight:600;color:#166534;">📶 连胜连败推送</span>
+            </div>
+            <div class="flex gap" style="font-size:11px;">
+              <span>连胜或连败 ≥ <select id="streakPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
+              </select> 次</span>
+              <span style="color:#999;">才推钉钉</span>
+            </div>
+            <div style="font-size:9px;color:#6b7280;margin-top:3px;">开启后：未达阈值不推送，达到后推送提醒</div>
+          </div>
+          <div style="background:#fdf4ff;border:1px solid #d946ef;border-radius:6px;padding:10px;margin-bottom:8px;">
+            <div class="flex" style="margin-bottom:4px;">
+              <label class="switch"><input type="checkbox" id="altPushEnable" onchange="updCfg()"><span class="slider"></span></label>
+              <span style="font-size:12px;font-weight:600;color:#86198f;">🔀 输赢交替推送</span>
+            </div>
+            <div class="flex gap" style="font-size:11px;">
+              <span>交替 ≥ <select id="altPushThreshold" onchange="updCfg()" style="padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;">
+                <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option>
+              </select> 次</span>
+              <span style="color:#999;">才推钉钉</span>
+            </div>
+            <div style="font-size:9px;color:#6b7280;margin-top:3px;">一赢一输算1次交替，达到后推送提醒</div>
+          </div>
+          <h2 style="margin-top:8px;font-size:13px;">🔔 钉钉 <span style="font-weight:400;font-size:10px;color:#059669;">✓ 已绑定</span></h2>
+          <input id="dingWebhook" type="text" placeholder="已锁定" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-bottom:4px;background:#f0fdf4;color:#059669;font-weight:600;" readonly disabled>
+          <div class="flex" style="flex-wrap:wrap;margin-bottom:4px;">
+            <label style="font-size:11px;"><input type="checkbox" id="dingHighRate" onchange="updCfg()"> 高胜率推送</label>
+            <span style="font-size:11px;">阈值 ≥ <input id="dingHighTh" type="number" value="55" min="1" max="100" style="width:38px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()">%</span>
+            <label style="font-size:11px;margin-left:6px;"><input type="checkbox" id="dingFail" onchange="updCfg()"> 连败</label>
+            <span style="font-size:11px;">阈值 <input id="dingFailTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
+            <label style="font-size:11px;"><input type="checkbox" id="dingWin" onchange="updCfg()"> 连胜</label>
+            <span style="font-size:11px;">阈值 <input id="dingWinTh" type="number" value="3" style="width:34px;padding:2px;border:1px solid #ddd;border-radius:3px;font-size:10px;" onchange="updCfg()"></span>
+          </div>
+          <div style="font-size:10px;color:#999;margin-top:2px;">推送关键词「监控」· 规则平均胜率 ≥ 阈值时推送</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========== TAB 4: 分析 ========== -->
+    <div class="tab-content" id="tab-analytics">
+
+      <div class="card" style="padding:14px;">
+        <h2>📈 回测</h2>
+        <div class="flex">
+          <span style="font-size:11px;">球:</span>
+          <input id="btCount" type="number" value="100" min="10" max="2000" style="width:50px;padding:2px;border:1px solid #ddd;border-radius:4px;font-size:11px;">
+          <button class="btn btn-primary btn-sm" onclick="runBt()">回测</button>
+          <button class="btn btn-danger btn-sm" onclick="clearData()">清数据</button>
+        </div>
+        <div id="backtestResult"></div>
+      </div>
+
+      <div class="card" style="padding:14px;">
+        <h2>📝 系统日志 <button class="btn btn-sm btn-outline" onclick="$('logsBox').innerHTML=''">清</button></h2>
+        <div id="logsBox"></div>
+      </div>
+
+    </div>
+
   </div>
 </div>
 
 <script>
+// ===== Tab 切换 =====
+function switchTab(tabId){
+  var tabs = document.querySelectorAll('.tab-content');
+  for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
+  var items = document.querySelectorAll('.sidebar-item');
+  for(var i=0;i<items.length;i++) items[i].classList.remove('active');
+  var el = document.getElementById('tab-'+tabId);
+  if(el) el.classList.add('active');
+  var idx = {'dashboard':0,'rules':1,'settings':2,'analytics':3}[tabId];
+  if(idx!==undefined && items[idx]) items[idx].classList.add('active');
+  // 切到规则 Tab 时刷新规则列表
+  if(tabId==='rules') loadRules();
+  if(tabId==='analytics') loadLogs();
+}
+
 var API = '';
 var poll = false;
 
@@ -304,7 +391,6 @@ function renderCountdown(val, running) {
   var num = document.getElementById('countdownNum');
   if(!ring || !num) return;
 
-  // 获取 SVG 父元素用于动画
   var svg = ring.closest('svg');
   var container = svg ? svg.parentElement : null;
 
@@ -373,53 +459,44 @@ function loadStatus(){
     if(r.reverseModeEnabled) status += ' \uD83D\uDD04';
     document.getElementById('liveStatus').textContent = status;
     document.getElementById('liveDot').className = 'dot '+(poll?'dot-green':'dot-gray');
-    // 智能熔断状态
     var ss = document.getElementById('smartStatus');
     if(r.smartBreakerEnabled){
       if(r.smartBreakerCoolingUntil > 0){
-        ss.textContent = '⏸ 冷却到#'+r.smartBreakerCoolingUntil+' | 已触发'+r.smartBreakerCooldownCount+'次';
+        ss.textContent = '\u23F8 冷却到#'+r.smartBreakerCoolingUntil+' | 已触发'+r.smartBreakerCooldownCount+'次';
         ss.style.color = '#dc2626';
       } else {
-        ss.textContent = '✅ 已启用 | 触发'+r.smartBreakerCooldownCount+'次';
+        ss.textContent = '\u2705 已启用 | 触发'+r.smartBreakerCooldownCount+'次';
         ss.style.color = '#059669';
       }
     } else {
       ss.textContent = '';
       ss.style.color = '#999';
     }
-    // 周期检测状态
     var ps = document.getElementById('periodStatus');
     if(r.periodDetectionEnabled){
       var bias = parseFloat(r.periodDetectionBias) || 0;
-      if(bias > 0.05) { ps.textContent = '📈 偏单 '+r.periodDetectionBias; ps.style.color = '#dc2626'; }
-      else if(bias < -0.05) { ps.textContent = '📉 偏双 '+r.periodDetectionBias; ps.style.color = '#2563eb'; }
-      else { ps.textContent = '⚖️ 平衡'; ps.style.color = '#059669'; }
+      if(bias > 0.05) { ps.textContent = '\uD83D\uDCC8 偏单 '+r.periodDetectionBias; ps.style.color = '#dc2626'; }
+      else if(bias < -0.05) { ps.textContent = '\uD83D\uDCC9 偏双 '+r.periodDetectionBias; ps.style.color = '#2563eb'; }
+      else { ps.textContent = '\u2696\uFE0F 平衡'; ps.style.color = '#059669'; }
     } else {
       ps.textContent = '';
     }
-    // 倒计时圆环 — 后端值校准本地秒级走动
     if(r.countdown !== undefined) {
       var serverVal = r.countdown;
       var serverRunning = r.countdownRunning;
-
       if(!serverRunning) {
-        // 后端停止 → 本地也停
         localRunning = false;
         localCountdown = 0;
         renderCountdown(0, false);
       } else if(serverVal > lastServerCountdown) {
-        // 后端值变大 → 新一轮开始，同步
         localCountdown = serverVal;
         localRunning = true;
         renderCountdown(localCountdown, true);
       } else if(!localRunning || Math.abs(localCountdown - serverVal) > 1) {
-        // 本地没在跑 或 偏差过大 → 校准
         localCountdown = serverVal;
         localRunning = true;
         renderCountdown(localCountdown, true);
       }
-      // else: 本地正在跑且偏差 ≤ 1，信任本地，不覆盖
-
       lastServerCountdown = serverVal;
     }
   });
@@ -638,8 +715,6 @@ function updCfg(){
 }
 
 function saveDing(){
-  // Webhook 已锁定，不可修改
-  // 只保存推送模式设置
   var xhr = new XMLHttpRequest();
   xhr.open('POST', API+'/api/config', true);
   xhr.setRequestHeader('Content-Type','application/json');
@@ -699,12 +774,14 @@ function runBt(){
         h += '</tbody></table>';
       }
       div.innerHTML = h;
-    } catch(e){}
+    } catch(e) {
+      document.getElementById('backtestResult').innerHTML = '<span style="color:#ef4444;">\u89E3\u6790\u9519\u8BEF</span>';
+    }
   };
 }
 
 function clearData(){
-  if(!confirm('\u786E\u5B9A\u6E05\u9664\uFF1F')) return;
+  if(!confirm('\u786E\u8BA4\u6E05\u9664\u6240\u6709\u6570\u636E\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\uFF01')) return;
   var xhr = new XMLHttpRequest();
   xhr.open('POST', API+'/api/control', true);
   xhr.setRequestHeader('Content-Type','application/json');
@@ -715,19 +792,18 @@ function clearData(){
 refresh();
 setInterval(refresh, 5000);
 
-// 每分钟 34-38 秒强制刷新核心数据（哈希池、预测历史、实时预测）
+// 每分钟 34-38 秒强制刷新核心数据
 setInterval(function(){
   var sec = new Date().getSeconds();
   if(sec >= 34 && sec <= 38){
     loadBalls();
     loadPredictions();
     loadNextPrediction();
-    // 同时更新状态栏
     var d = new Date();
     var h = d.getHours(); if(h<10) h='0'+h;
     var m = d.getMinutes(); if(m<10) m='0'+m;
     var s = d.getSeconds(); if(s<10) s='0'+s;
-    document.getElementById('refreshInfo').textContent = '\uD83D\uDD04 '+h+':'+m+':'+s + ' \u2606\u5F3A\u5237';
+    document.getElementById('refreshInfo').textContent = '\uD83D\uDD04 '+h+':'+m+':'+s+' \u2605\u5F3A\u5237';
   }
 }, 1000);
 </script>
