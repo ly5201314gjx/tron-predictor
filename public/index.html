@@ -118,6 +118,11 @@ body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;c
         <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npDrag" style="font-size:16px;">-</div><div class="lbl">长龙</div></div>
         <div class="stat-box" style="background:rgba(255,255,255,0.6);padding:6px;"><div class="num" id="npBal" style="font-size:16px;">-</div><div class="lbl">基数</div></div>
       </div>
+      <!-- 目标高度 -->
+      <div style="text-align:center;min-width:120px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:4px 10px;">
+        <div style="font-size:9px;color:#7c3aed;font-weight:600;letter-spacing:1px;">TARGET</div>
+        <div id="npTarget" style="font-size:18px;font-weight:900;color:#7c3aed;line-height:1.2;font-family:monospace;">-</div>
+      </div>
       <div id="npMode" style="font-size:11px;color:#7c3aed;font-weight:600;text-align:center;min-width:60px;"></div>
     </div>
   </div>
@@ -288,8 +293,11 @@ setInterval(function(){
   document.getElementById('liveClock').textContent = h+':'+m+':'+s;
 }, 200);
 
-// 50秒倒计时圆环 — 后端驱动，前端只显示
+// 50秒倒计时圆环 — 后端权威数据 + 前端本地秒级走动
 var RING_CIRC = 2 * Math.PI * 38; // ≈238.76
+var localCountdown = 0;   // 前端本地倒计时值
+var localRunning = false;  // 前端本地是否在跑
+var lastServerCountdown = -1; // 上次后端返回的值，用于检测重置
 
 function renderCountdown(val, running) {
   var ring = document.getElementById('countdownRing');
@@ -334,6 +342,20 @@ function renderCountdown(val, running) {
     if(container) container.classList.remove('countdown-active');
   }
 }
+
+// 本地 1 秒定时器：秒级走动
+setInterval(function(){
+  if(localRunning && localCountdown > 0) {
+    localCountdown--;
+    if(localCountdown <= 0) {
+      localRunning = false;
+      localCountdown = 0;
+    }
+    renderCountdown(localCountdown, localRunning);
+  }
+}, 1000);
+
+// 初始化
 renderCountdown(0, false);
 
 // ===== 各区块刷新 =====
@@ -375,9 +397,30 @@ function loadStatus(){
     } else {
       ps.textContent = '';
     }
-    // 倒计时圆环
+    // 倒计时圆环 — 后端值校准本地秒级走动
     if(r.countdown !== undefined) {
-      renderCountdown(r.countdown, r.countdownRunning);
+      var serverVal = r.countdown;
+      var serverRunning = r.countdownRunning;
+
+      if(!serverRunning) {
+        // 后端停止 → 本地也停
+        localRunning = false;
+        localCountdown = 0;
+        renderCountdown(0, false);
+      } else if(serverVal > lastServerCountdown) {
+        // 后端值变大 → 新一轮开始，同步
+        localCountdown = serverVal;
+        localRunning = true;
+        renderCountdown(localCountdown, true);
+      } else if(!localRunning || Math.abs(localCountdown - serverVal) > 1) {
+        // 本地没在跑 或 偏差过大 → 校准
+        localCountdown = serverVal;
+        localRunning = true;
+        renderCountdown(localCountdown, true);
+      }
+      // else: 本地正在跑且偏差 ≤ 1，信任本地，不覆盖
+
+      lastServerCountdown = serverVal;
     }
   });
 }
@@ -429,6 +472,7 @@ function loadNextPrediction(){
       document.getElementById('npRul').textContent = r.ruleCount+'\u6761';
       document.getElementById('npDrag').textContent = r.dragonLength>1 ? r.dragonParity+'\u00D7'+r.dragonLength : '-';
       document.getElementById('npBal').textContent = r.totalBalls+'\u7403';
+      document.getElementById('npTarget').textContent = r.targetHeight ? '#'+r.targetHeight : '-';
       var m = '\uD83D\uDFE2';
       if(r.circuitBreakerArmed) m = '\uD83D\uDD12\u7194\u65AD';
       else if(r.reverseMode&&r.reversePhase) m = '\uD83D\uDD04\u53CD\u5411';
@@ -440,6 +484,7 @@ function loadNextPrediction(){
       document.getElementById('npRul').textContent = '-';
       document.getElementById('npDrag').textContent = '-';
       document.getElementById('npBal').textContent = '-';
+      document.getElementById('npTarget').textContent = '-';
       document.getElementById('npMode').textContent = r.message||'\u23F3';
     }
   });
